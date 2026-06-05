@@ -12,3 +12,6 @@ venv/
 
 # OS
 .DS_Store
+
+# Browser screenshot tooling
+.playwright-mcp/
