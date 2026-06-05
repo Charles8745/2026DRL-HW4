@@ -280,7 +280,7 @@ def parse_specs(description: str) -> dict:
     for line in block.splitlines():
         if ":" not in line and "：" not in line:
             continue
-        raw_key, _, raw_val = re.split(r"[:：]", line, maxsplit=1)
+        raw_key, _, raw_val = re.split(r"([:：])", line, maxsplit=1)  # capturing group -> 3 parts
         key = re.sub(r"\(.*?\)", "", raw_key).strip()      # drop "(m)"/"(mm)" units in key
         for norm, prefixes in _ALIASES.items():
             if any(key.startswith(p) for p in prefixes) and specs[norm] is None:
@@ -373,7 +373,7 @@ USAGE_BY_TITLE = {
     "FORZA350": "scooter", "ADV350": "scooter", "CB1000F": "naked",
     "CB1000 Hornet SP": "naked", "CB650R E-Clutch": "naked", "CB300R": "naked",
     "CBR650R E-Clutch": "sport", "CBR500R": "sport",
-    "AFRICA TWIN ADVENTURE SPORTS ES": "adventure", "AFRICA TWIN ES": "adventure",
+    "AFRICA TWIN ADVENTURE SPORTS ES DCT": "adventure", "AFRICA TWIN ES": "adventure",
     "X-ADV": "scooter", "CRF300L": "adventure", "CB1000GT": "touring",
 }
 
