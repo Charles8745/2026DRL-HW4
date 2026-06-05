@@ -16,7 +16,7 @@ USAGE_BY_TITLE = {
     "FORZA350": "scooter", "ADV350": "scooter", "CB1000F": "naked",
     "CB1000 Hornet SP": "naked", "CB650R E-Clutch": "naked", "CB300R": "naked",
     "CBR650R E-Clutch": "sport", "CBR500R": "sport",
-    "AFRICA TWIN ADVENTURE SPORTS ES": "adventure", "AFRICA TWIN ES": "adventure",
+    "AFRICA TWIN ADVENTURE SPORTS ES DCT": "adventure", "AFRICA TWIN ES": "adventure",
     "X-ADV": "scooter", "CRF300L": "adventure", "CB1000GT": "touring",
 }
 

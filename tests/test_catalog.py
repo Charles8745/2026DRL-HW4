@@ -24,3 +24,11 @@ def test_price_is_int_and_specs_present():
 def test_every_title_has_a_usage_label():
     for c in load_catalog():
         assert c["usage"] in {"sport","naked","touring","adventure","scooter","cruiser"}
+
+def test_no_title_falls_back_to_default():
+    # every CSV title must be explicitly present in USAGE_BY_TITLE (no silent 'naked' fallback)
+    import csv, os
+    from data.catalog import CSV_PATH, USAGE_BY_TITLE
+    titles = [r["Title"].strip() for r in csv.DictReader(open(CSV_PATH, encoding="utf-8"))]
+    missing = [t for t in titles if t not in USAGE_BY_TITLE]
+    assert missing == [], f"titles missing from USAGE_BY_TITLE: {missing}"
