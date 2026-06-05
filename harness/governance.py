@@ -17,7 +17,8 @@ def is_affirmative(text: str) -> bool:
 def groundedness_violations(answer: str, facts: dict) -> list[str]:
     """Return price-like numbers in the answer not present in tool facts."""
     allowed = {str(p) for p in facts.get("prices", [])}
-    nums = re.findall(r"\b\d{5,7}\b", answer.replace(",", ""))
+    # not \b: CJK are word chars in Python's Unicode regex, so "250000元" would be missed.
+    nums = re.findall(r"(?<!\d)\d{5,7}(?!\d)", answer.replace(",", ""))
     return [n for n in nums if n not in allowed]
 
 class TurnBudget:

@@ -1,18 +1,34 @@
 import json, time
+from harness.governance import groundedness_violations
 
-THRESHOLDS = {"router_accuracy": 0.90, "task_success": 0.85}
+THRESHOLDS = {"router_accuracy": 0.90, "task_success": 0.85, "groundedness_violation_rate": 0.0}
+
+def _facts_from_trace(out: dict) -> dict:
+    """Collect every price the tools actually returned, so the reply can be checked against them."""
+    prices = []
+    for s in out.get("trace", {}).get("steps", []) or []:
+        data = (s.get("tool_result") or {}).get("data")
+        items = data if isinstance(data, list) else [data] if isinstance(data, dict) else []
+        for it in items:
+            if isinstance(it, dict):
+                for k in ("asking_price", "price"):
+                    if isinstance(it.get(k), int):
+                        prices.append(it[k])
+    return {"prices": prices}
 
 def score_case(case: dict, out: dict) -> dict:
     if case["ground_truth"].get("blocked"):
         router_ok = bool(out.get("blocked"))
-        return {"id": case["id"], "router_ok": router_ok, "tools_ok": router_ok, "tokens": 0}
+        return {"id": case["id"], "router_ok": router_ok, "tools_ok": router_ok,
+                "grounded_ok": True, "tokens": 0}
     label = out.get("trace", {}).get("router_label")
     router_ok = (label == case["expected_domain"])
     steps = out.get("trace", {}).get("steps", []) or []
-    used = {s["tool_name"] for s in steps}
+    used = {s["tool_name"] for s in steps}     # includes proposed (confirmation-gated) tools
     tools_ok = set(case["expected_tools"]).issubset(used) if case["expected_tools"] else (len(used) == 0)
+    grounded_ok = len(groundedness_violations(out.get("reply", ""), _facts_from_trace(out))) == 0
     return {"id": case["id"], "router_ok": router_ok, "tools_ok": tools_ok,
-            "tokens": out.get("trace", {}).get("tokens", 0)}
+            "grounded_ok": grounded_ok, "tokens": out.get("trace", {}).get("tokens", 0)}
 
 def run(orchestrator, cases: list[dict]) -> dict:
     rows = []
@@ -25,11 +41,13 @@ def run(orchestrator, cases: list[dict]) -> dict:
     metrics = {
         "router_accuracy": sum(r["router_ok"] for r in rows) / n,
         "task_success": sum(r["tools_ok"] for r in rows) / n,
+        "groundedness_violation_rate": sum(not r["grounded_ok"] for r in rows) / n,
         "avg_latency": sum(r["latency"] for r in rows) / n,
         "avg_tokens": sum(r["tokens"] for r in rows) / n,
     }
     metrics["PASS"] = (metrics["router_accuracy"] >= THRESHOLDS["router_accuracy"]
-                       and metrics["task_success"] >= THRESHOLDS["task_success"])
+                       and metrics["task_success"] >= THRESHOLDS["task_success"]
+                       and metrics["groundedness_violation_rate"] <= THRESHOLDS["groundedness_violation_rate"])
     return {"rows": rows, "metrics": metrics}
 
 def main():
