@@ -1,5 +1,8 @@
 # Secrets
 .env
+.env.*
+.env[ ]*
+!.env.example
 
 # Brainstorm visual companion (local only)
 .superpowers/
