@@ -39,9 +39,9 @@
 │      分類意圖 → {找車推薦, 規格比較, 交易訂單,             │
 │                 售後轉真人, 閒聊/範圍外}                   │
 │                            │ 分派（各情境獨立）            │
-│  ③ Domain Handler                                         │
-│      掛載該情境專屬 tool group，執行 Gemini                │
-│      function-calling 迴圈                                 │
+│  ③ Domain Handler ── 核心迴圈 ──┐                         │
+│      掛載該情境專屬 tool group   │ Observe→Reason→Act      │
+│      執行 Gemini function loop   └──↺ 未完成則續迴圈        │
 │                            │ 呼叫                          │
 │  ④ Tool Layer (8 個 function，分屬 4 個 tool group)       │
 │      操作資料層、回傳結構化結果                             │
@@ -52,6 +52,11 @@
 │                                                           │
 │  ⑥ Escalation                                             │
 │      無法處理 → create_ticket → escalate_to_human         │
+│                                                           │
+│  ╔═══════════════════════════════════════════════════╗   │
+│  ║ Security & Governance（橫切所有階段）              ║   │
+│  ║ 輸入防護 · 輸出 groundedness · 工具授權 · 稽核 · 限額 ║   │
+│  ╚═══════════════════════════════════════════════════╝   │
 └───────────────────────────┬─────────────────────────────┘
                             │
 ┌───────────────────────────▼─────────────────────────────┐
@@ -67,7 +72,35 @@
 
 **情境獨立（domain isolation）**：四大情境彼此獨立，各自擁有專屬的 tool group 與 system prompt；Handler 只會看到該情境的工具子集，降低誤用工具的機率，也讓每個情境可獨立測試與擴充。
 
-**LLM + Tools + Memory** 三要素齊備，符合作業對 AI system architecture 的要求。
+### 2.1 核心迴圈：Context → Observe → Reason → Act
+
+本系統對齊標準 AI Harness 的核心 agent 迴圈。Domain Handler 內部即是此迴圈的具體實作：
+
+| 迴圈階段 | 本系統對應 | 說明 |
+|---|---|---|
+| **Context** | Query Rewriter + Memory + 情境 system prompt | 組裝本輪上下文：改寫後的精準 query、使用者偏好槽、該情境提示 |
+| **Observe** | Router 分類 + 觀察工具回傳 | 觀察當前狀態：分類意圖、讀取上一輪工具結果 |
+| **Reason** | Handler LLM（Gemini function calling）| 推理「該呼叫哪個工具、帶什麼參數」或是否已可作答 |
+| **Act** | 執行工具呼叫 / 產生回覆 | 呼叫工具改變狀態或回覆使用者；若任務未完成則回到 Observe |
+
+迴圈持續到任務完成或觸發 escalation。每一圈都產生 decision trace。
+
+### 2.2 對齊標準 AI Harness 六大元件
+
+| 標準元件 | 本系統實作 |
+|---|---|
+| **Prompt** | Rewriter / Router / 各情境 Handler 的 system prompt（見 §2.3） |
+| **Orchestration** | Orchestrator + Intent Router（§10） |
+| **核心迴圈** | Context → Observe → Reason → Act（§2.1） |
+| **Tools & Skills** | 8 工具 / 4 tool group（§4） |
+| **Memory** | 對話歷史 + 偏好槽（§6） |
+| **Security & Governance** | 輸入/輸出防護、工具授權、稽核、限額（§8） |
+
+### 2.3 Prompt 層
+
+系統以分層 prompt 驅動：（a）**Rewriter prompt**——改寫精準化與指代解析；（b）**Router prompt**——情境判斷與分類；（c）**情境 Handler prompt**——各情境的角色設定、可用工具說明、groundedness 與治理規則。Prompt 為一級設計物件，集中管理便於迭代與評估。
+
+**LLM + Tools + Memory + Security/Governance** 元件齊備，符合作業對 AI system architecture 的要求。
 
 **LLM 後端**：Google Gemini API（function calling 透過 Gemini function declarations）。使用 `google-genai` SDK，預設模型 `gemini-2.0-flash`。API key 由使用者寫入 `.env`（`GEMINI_API_KEY=...`），以 `.env.example` 提供範本，`.env` 列入 `.gitignore`。
 
@@ -148,7 +181,22 @@
 
 ---
 
-## 8. Evaluation（評估方法）
+## 8. Security & Governance（安全與治理）
+
+對齊標準 AI Harness 的第六大元件，橫切整條管線。
+
+- **輸入防護（input guardrails）**：偵測 prompt-injection（如「忽略前述指示」）、拒答範圍外/敏感請求、對使用者個資（聯絡方式）最小化蒐集與不外洩。
+- **輸出防護（output guardrails）**：groundedness 檢查——價格/規格/車況等事實必須來自工具回傳，否則攔截並重新生成或改為澄清；禁止給出具約束力承諾（如保證成交價、保證車況）。
+- **工具授權（least privilege）**：每情境僅能存取自己的 tool group；狀態變更類工具（`book_viewing`、`create_ticket`、`escalate_to_human`）執行前需經確認步驟，避免誤觸發。
+- **稽核軌跡（audit trail）**：decision trace 同時作為 audit log，可回溯每次「改寫→路由→工具呼叫→結果」之決策。
+- **成本/頻率限制（rate & cost limits）**：限制單輪最大工具呼叫次數與 token 預算，防止迴圈失控或濫用。
+- **治理出口**：偵測到無法安全處理（高風險、反覆失敗、明確糾紛）即 `escalate_to_human`，交由真人接手。
+
+> Security & Governance 與 §7 錯誤處理互補：§7 處理「功能性失敗」，§8 處理「安全、合規、授權與可稽核性」。
+
+---
+
+## 9. Evaluation（評估方法）
 
 建立 **~20–30 題測試集**（`eval/testset.json`），每題標註預期領域、預期結果與事實依據，涵蓋四大能力。
 
@@ -163,7 +211,7 @@
 
 ---
 
-## 9. AI Orchestration（流程控制與決策）
+## 10. AI Orchestration（流程控制與決策）
 
 - **前處理層**：Query Rewriter 以 LLM 結合對話記憶，把模糊/含指代的輸入改寫成精準、自含上下文的 query，作為後續決策的乾淨輸入。
 - **決策層**：Intent Router 以（精準化 query + 情境判斷 system prompt）分類意圖，決定走哪條領域路徑；領域內由 Gemini function calling 自主決定工具呼叫順序與參數。
@@ -172,7 +220,7 @@
 
 ---
 
-## 10. 交付物（Deliverables）對應
+## 11. 交付物（Deliverables）對應
 
 1. **書面報告（2–5 頁）**：濃縮第 1–9 段——問題定義、AI Harness 系統設計、tools 設計（8 個）、workflow / agent 流程、evaluation 方法。
 2. **Infographic（資訊圖表）**：視覺化 system architecture（LLM/tools/memory）、orchestration / workflow flow、function calling / tool chain。以視覺陪伴工具設計版面後輸出 PNG。
@@ -180,7 +228,7 @@
 
 ---
 
-## 11. 專案結構（Project Structure）
+## 12. 專案結構（Project Structure）
 
 沿用既有 HW 慣例（Flask + templates/static + report + README）。
 
@@ -193,7 +241,9 @@ HW4/
     handlers.py               # 四大情境 handler（各自 tool group，function-calling 迴圈）
     tools.py                  # 8 個工具 function + JSON schema（分 4 tool group）
     memory.py                 # 對話歷史 + 偏好槽
-    orchestrator.py           # 串接各層（rewriter→router→handler）、escalation 控制
+    governance.py             # 安全與治理：輸入/輸出防護、工具授權、限額、稽核
+    prompts.py                # 集中管理 rewriter/router/各情境 system prompt
+    orchestrator.py           # 串接各層（rewriter→router→handler）、治理鉤子、escalation
   data/
     catalog.py                # 載入 product_dataset.csv
     listings.py               # 合成二手刊登（固定 seed）
@@ -213,7 +263,7 @@ HW4/
 
 ---
 
-## 12. 技術選型摘要
+## 13. 技術選型摘要
 
 | 項目 | 選擇 |
 |---|---|
