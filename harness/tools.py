@@ -42,3 +42,22 @@ def compare_models(store, model_a, model_b):
         out[m] = {"brand": cat["brand"], "usage": cat["usage"],
                   "price": cat["price"], **_spec_view(cat["specs"])}
     return _ok(out)
+
+def check_order(store, order_id=None, buyer=None):
+    if order_id:
+        o = next((o for o in store.orders if o["order_id"] == order_id), None)
+        return _ok(o) if o else _err(f"查無訂單 {order_id}")
+    if buyer:
+        rows = [o for o in store.orders if o["buyer"] == buyer]
+        return _ok(rows) if rows else _err(f"查無買家 {buyer} 的訂單")
+    return _err("請提供 order_id 或 buyer")
+
+def book_viewing(store, listing_id, datetime, contact):
+    l = store.listing(listing_id)
+    if not l:
+        return _err(f"找不到刊登 {listing_id}")
+    oid = f"O{len(store.orders)+1:03d}"
+    order = {"order_id": oid, "listing_id": listing_id, "buyer": contact,
+             "status": "預約看車", "created_at": datetime, "updated_at": datetime}
+    store.orders.append(order)
+    return _ok(order)
