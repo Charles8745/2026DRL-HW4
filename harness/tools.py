@@ -20,3 +20,25 @@ def recommend(store, budget, usage=None, brand_pref=None):
     r = search_listings(store, brand_pref=brand_pref, max_price=budget, usage=usage)
     rows = sorted(r["data"], key=lambda x: x["asking_price"])
     return _ok(rows)
+
+_SENTINEL = "資料未提供"
+
+def get_listing_detail(store, listing_id):
+    l = store.listing(listing_id)
+    if not l:
+        return _err(f"找不到刊登 {listing_id}")
+    return _ok(_enrich(store, l))
+
+def _spec_view(specs: dict) -> dict:
+    fields = ["displacement_cc", "horsepower", "torque_nm", "seat_height_mm", "weight_kg"]
+    return {f: (specs.get(f) if specs.get(f) is not None else _SENTINEL) for f in fields}
+
+def compare_models(store, model_a, model_b):
+    out = {}
+    for m in (model_a, model_b):
+        cat = store.catalog_for(m)
+        if not cat:
+            return _err(f"型錄查無車款：{m}")
+        out[m] = {"brand": cat["brand"], "usage": cat["usage"],
+                  "price": cat["price"], **_spec_view(cat["specs"])}
+    return _ok(out)
