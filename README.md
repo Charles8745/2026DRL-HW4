@@ -50,14 +50,17 @@ python app.py                 # 啟動 Flask，開 http://localhost:5000
 ## 測試
 
 ```bash
-python -m pytest -q           # 68 個單元測試，全程使用 FakeLLM，不需 API key、不花費用
+python -m pytest -q           # 70 個單元測試，全程使用 FakeLLM，不需 API key、不花費用
 ```
 
 ## 評估
 
 ```bash
-python -m eval.run_eval       # 跑 27 題測試集，輸出 router 準確率 / 任務成功率 / 延遲 / token 與 PASS/FAIL（需 GEMINI_API_KEY）
+python -m eval.run_eval                          # 全部 27 題（需 GEMINI_API_KEY）
+python -m eval.run_eval --limit 8 --sleep 2      # 分批 8 題、每題間隔 2 秒（避開免費額度 429）
+python -m eval.run_eval --offset 8 --limit 8     # 下一批（第 9–16 題）
 ```
+輸出 router 準確率 / 任務成功率 / groundedness 違規率 / 延遲 / token 與 PASS。單一題 429 不會中斷整批（記為 error 並續跑）。
 
 ## 設計重點
 
