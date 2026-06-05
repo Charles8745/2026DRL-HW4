@@ -1,0 +1,14 @@
+# Secrets
+.env
+
+# Brainstorm visual companion (local only)
+.superpowers/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# OS
+.DS_Store
