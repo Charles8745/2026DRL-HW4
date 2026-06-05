@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>RideButler AI Harness — Infographic</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; font-family:"PingFang TC","Microsoft JhengHei",system-ui,sans-serif; }
+  body { background:#0b0f1c; color:#e8ecf5; width:1280px; padding:34px 40px 44px; }
+  h1 { font-size:30px; letter-spacing:.5px; }
+  h1 .em { color:#5b8def; }
+  .sub { color:#8aa0c4; margin-top:6px; font-size:15px; }
+  .grid6 { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin:22px 0 6px; }
+  .comp { background:#141b2e; border:1px solid #25304a; border-radius:10px; padding:10px 8px; text-align:center; }
+  .comp .t { font-size:13px; font-weight:700; color:#cdd9ef; }
+  .comp .d { font-size:11px; color:#7e92b4; margin-top:4px; line-height:1.35; }
+  .comp.hl { border-color:#5b8def; background:#15203a; }
+  .row { display:flex; gap:14px; margin-top:18px; }
+  .panel { background:#0f1525; border:1px solid #222c44; border-radius:14px; padding:16px 18px; }
+  .panel h2 { font-size:15px; color:#9fb8e6; text-transform:uppercase; letter-spacing:.06em; margin-bottom:12px; }
+  .flow { flex:1.5; }
+  .pipe { display:flex; flex-direction:column; gap:8px; }
+  .stage { display:flex; align-items:center; gap:10px; }
+  .chip { min-width:118px; text-align:center; padding:9px 10px; border-radius:9px; font-size:13px; font-weight:700; }
+  .c-user{ background:#2b3650; } .c-rw{ background:#3a2f6e; } .c-rt{ background:#2b4a8f; }
+  .c-hd{ background:#1d6b54; } .c-tool{ background:#0f5132; } .c-reply{ background:#2b3650; }
+  .stage .desc { font-size:12px; color:#90a4c6; }
+  .arrow { color:#5b8def; font-size:18px; padding-left:50px; line-height:.6; }
+  .crossbar { margin-top:10px; display:flex; gap:10px; }
+  .bar { flex:1; border-radius:9px; padding:8px 10px; font-size:12px; text-align:center; font-weight:600; }
+  .mem { background:#3a2c12; border:1px solid #8a5a16; color:#f0c068; }
+  .gov { background:#3a1320; border:1px solid #8a2440; color:#f08aa0; }
+  .cora { flex:1; }
+  .cora .step { display:flex; align-items:center; gap:8px; margin-bottom:9px; }
+  .cora .k { width:78px; font-weight:800; font-size:13px; color:#5b8def; }
+  .cora .v { font-size:12px; color:#aebede; }
+  .cora .loopnote { font-size:11px; color:#7e92b4; margin-top:4px; }
+  .tools { margin-top:18px; }
+  .tgrid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  .dom { background:#0f1525; border:1px solid #222c44; border-radius:12px; padding:12px; }
+  .dom .h { font-size:13px; font-weight:800; color:#cdd9ef; margin-bottom:8px; display:flex; justify-content:space-between; }
+  .dom .h .g { color:#5b8def; font-size:11px; font-weight:600; }
+  .tool { background:#10182b; border:1px solid #243150; border-radius:7px; padding:6px 8px; margin-bottom:6px; font-size:12px; }
+  .tool code { color:#7fd4a8; font-size:11px; }
+  .tool.warn { border-color:#8a5a16; }
+  .tool .lock { color:#f0c068; font-size:10px; }
+  .rt { margin-top:18px; }
+  .rtsteps { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .rtbox { background:#10182b; border:1px solid #243150; border-radius:8px; padding:8px 11px; font-size:12px; }
+  .rtbox b { color:#7fd4a8; }
+  .rtar { color:#5b8def; font-weight:800; }
+  .foot { margin-top:20px; color:#6b7ea0; font-size:12px; display:flex; justify-content:space-between; }
+  .tag { display:inline-block; background:#15203a; border:1px solid #2b3a5c; color:#9fb8e6; border-radius:20px; padding:3px 11px; font-size:11px; margin-left:6px; }
+</style>
+</head>
+<body>
+  <h1>🏍️ <span class="em">RideButler</span> — 二手重機交易平台 AI 客服 Harness
+    <span class="tag">Gemini function calling</span><span class="tag">Router + 工具迴圈</span></h1>
+  <div class="sub">LLM 作為系統控制器，透過 function calling 串接平台資料與工具，端到端完成多步驟客服任務 · 對齊標準 AI Harness 六大元件</div>
+
+  <!-- 6 canonical components -->
+  <div class="grid6">
+    <div class="comp hl"><div class="t">Prompt</div><div class="d">分層 system prompt（rewriter/router/handler/fallback）</div></div>
+    <div class="comp hl"><div class="t">Orchestration</div><div class="d">Orchestrator + Intent Router</div></div>
+    <div class="comp hl"><div class="t">核心迴圈</div><div class="d">Context→Observe→Reason→Act</div></div>
+    <div class="comp hl"><div class="t">Tools & Skills</div><div class="d">8 工具 / 4 領域 group + fallback</div></div>
+    <div class="comp hl"><div class="t">Memory</div><div class="d">session 對話 + 偏好槽</div></div>
+    <div class="comp hl"><div class="t">Security & Governance</div><div class="d">防護 · 確認閘 · 限額 · 稽核</div></div>
+  </div>
+
+  <!-- main flow + C-O-R-A -->
+  <div class="row">
+    <div class="panel flow">
+      <h2>Orchestration / Workflow Flow</h2>
+      <div class="pipe">
+        <div class="stage"><div class="chip c-user">使用者輸入</div><div class="desc">多輪對話（HTTP）</div></div>
+        <div class="arrow">▼</div>
+        <div class="stage"><div class="chip c-rw">① Query Rewriter</div><div class="desc">改寫精準化 · 解析「第一台」· 多意圖偵測</div></div>
+        <div class="arrow">▼</div>
+        <div class="stage"><div class="chip c-rt">② Intent Router</div><div class="desc">5 類分類（4 情境 + 無工具 fallback）</div></div>
+        <div class="arrow">▼</div>
+        <div class="stage"><div class="chip c-hd">③ Domain Handler</div><div class="desc">情境專屬 tool group · manual function-calling 迴圈</div></div>
+        <div class="arrow">▼</div>
+        <div class="stage"><div class="chip c-tool">④ Tool Layer</div><div class="desc">8 function → DataStore → 結構化 JSON</div></div>
+        <div class="arrow">▼</div>
+        <div class="stage"><div class="chip c-reply">回覆 + Decision Trace</div><div class="desc">側欄即時顯示 · 作 audit log</div></div>
+      </div>
+      <div class="crossbar">
+        <div class="bar mem">⑤ Memory：對話歷史 + budget/brand_pref/usage/viewed_listings/pending_intent</div>
+      </div>
+      <div class="crossbar">
+        <div class="bar gov">⑥ Security & Governance（橫切）：injection 防護 · 兩階段確認閘 · 單輪限額 · groundedness · 稽核</div>
+      </div>
+    </div>
+
+    <div class="panel cora">
+      <h2>核心迴圈 C-O-R-A</h2>
+      <div class="step"><div class="k">Context</div><div class="v">Rewriter + Memory + 情境 prompt 組裝本輪上下文</div></div>
+      <div class="step"><div class="k">Observe</div><div class="v">Router 分類意圖；觀察上一輪工具回傳</div></div>
+      <div class="step"><div class="k">Reason</div><div class="v">Handler 推理：呼叫哪個工具、帶什麼參數</div></div>
+      <div class="step"><div class="k">Act</div><div class="v">執行工具 / 產生回覆；未完成回到 Observe</div></div>
+      <div class="loopnote">↺ 迴圈持續到任務完成或觸發 escalation；每圈產生 decision trace</div>
+      <h2 style="margin-top:18px">Memory 連續性</h2>
+      <div class="v" style="font-size:12px;color:#aebede;line-height:1.6">
+        session_id keying · viewed_listings 有序 → 序數解析（第 N 台 → viewed[N-1]）· pending_intent 延後回收次意圖
+      </div>
+    </div>
+  </div>
+
+  <!-- tool chain -->
+  <div class="panel tools">
+    <h2>Tools & Skills — 8 function / 4 領域 tool group（⚠ = 兩階段確認）</h2>
+    <div class="tgrid">
+      <div class="dom"><div class="h">找車推薦 <span class="g">group</span></div>
+        <div class="tool"><code>search_listings</code><div class="lock">brand/price/year/usage 篩選</div></div>
+        <div class="tool"><code>recommend</code><div class="lock">依預算排序推薦</div></div>
+      </div>
+      <div class="dom"><div class="h">規格比較 <span class="g">group</span></div>
+        <div class="tool"><code>get_listing_detail</code><div class="lock">單一刊登規格+車況</div></div>
+        <div class="tool"><code>compare_models</code><div class="lock">並排比較 · 缺值「資料未提供」</div></div>
+      </div>
+      <div class="dom"><div class="h">交易訂單 <span class="g">group</span></div>
+        <div class="tool"><code>check_order</code><div class="lock">查交易/出貨/退款</div></div>
+        <div class="tool warn"><code>book_viewing</code> <span class="lock">⚠確認</span><div class="lock">建立預約看車</div></div>
+      </div>
+      <div class="dom"><div class="h">售後轉真人 <span class="g">group</span></div>
+        <div class="tool warn"><code>create_ticket</code> <span class="lock">⚠確認</span><div class="lock">建立客訴/退款工單</div></div>
+        <div class="tool warn"><code>escalate_to_human</code> <span class="lock">⚠確認</span><div class="lock">轉接真人</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- function-calling round trip -->
+  <div class="panel rt">
+    <h2>Function-Calling 機制（round-trip）</h2>
+    <div class="rtsteps">
+      <div class="rtbox">① app 送 <b>function declarations</b> + 對話</div>
+      <span class="rtar">→</span>
+      <div class="rtbox">② Gemini 回 <b>function_call(name,args)</b></div>
+      <span class="rtar">→</span>
+      <div class="rtbox">③ app 攔截並執行 Python 工具</div>
+      <span class="rtar">→</span>
+      <div class="rtbox">④ 結果包成 <b>function_response</b> 回填</div>
+      <span class="rtar">→</span>
+      <div class="rtbox">⑤ 模型續推理：再呼叫 or 最終回覆</div>
+      <span class="rtar">↺</span>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div>資料：真實 33 款型錄 + 合成二手刊登/訂單（固定 seed）</div>
+    <div>62 單元測試（FakeLLM，離線）· Flask Web 聊天 + Decision Trace 側欄</div>
+  </div>
+</body>
+</html>
