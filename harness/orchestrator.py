@@ -22,7 +22,7 @@ class Orchestrator:
         slots = self.memory.get(sid)["slots"]
         pending = slots.get("pending_action")
         if pending:
-            self.memory.update_slots(sid, pending_action=None) or slots.update({"pending_action": None})
+            slots["pending_action"] = None
             if is_affirmative(user_input):
                 result = TOOL_FUNCS[pending["tool_name"]](self.store, **pending["args"])
                 reply = ("已為您完成預約。" if result["ok"] else f"執行失敗：{result['error']}")
