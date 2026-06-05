@@ -1,4 +1,4 @@
-import json, time, collections
+import json, time
 
 THRESHOLDS = {"router_accuracy": 0.90, "task_success": 0.85}
 
