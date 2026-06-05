@@ -61,3 +61,55 @@ def book_viewing(store, listing_id, datetime, contact):
              "status": "預約看車", "created_at": datetime, "updated_at": datetime}
     store.orders.append(order)
     return _ok(order)
+
+def create_ticket(store, category, description):
+    return _ok(store.add_ticket(category, description))
+
+def escalate_to_human(store, reason):
+    return _ok({"handoff": True, "reason": reason,
+                "message": "已為您轉接真人客服，稍後將有專人聯繫。"})
+
+TOOL_FUNCS = {
+    "search_listings": search_listings, "recommend": recommend,
+    "get_listing_detail": get_listing_detail, "compare_models": compare_models,
+    "check_order": check_order, "book_viewing": book_viewing,
+    "create_ticket": create_ticket, "escalate_to_human": escalate_to_human,
+}
+TOOL_GROUPS = {
+    "找車推薦": ["search_listings", "recommend"],
+    "規格比較": ["get_listing_detail", "compare_models"],
+    "交易訂單": ["check_order", "book_viewing"],
+    "售後轉真人": ["create_ticket", "escalate_to_human"],
+}
+CONFIRM_REQUIRED = {"book_viewing", "create_ticket", "escalate_to_human"}
+
+def _p(props, required):  # build a JSON-schema object
+    return {"type": "object", "properties": props, "required": required}
+
+TOOL_SCHEMAS = {
+    "search_listings": {"name": "search_listings",
+        "description": "依品牌/價格上限/年份/車種篩選在售二手刊登",
+        "parameters": _p({"brand_pref": {"type": "string"}, "max_price": {"type": "integer"},
+                          "year_from": {"type": "integer"},
+                          "usage": {"type": "string",
+                                    "enum": ["sport","naked","touring","adventure","scooter","cruiser"]}}, [])},
+    "recommend": {"name": "recommend", "description": "依預算/車種推薦並由低到高排序",
+        "parameters": _p({"budget": {"type": "integer"}, "usage": {"type": "string"},
+                          "brand_pref": {"type": "string"}}, ["budget"])},
+    "get_listing_detail": {"name": "get_listing_detail", "description": "取得單一刊登完整規格與車況",
+        "parameters": _p({"listing_id": {"type": "string"}}, ["listing_id"])},
+    "compare_models": {"name": "compare_models", "description": "並排比較兩車款規格與價格",
+        "parameters": _p({"model_a": {"type": "string"}, "model_b": {"type": "string"}}, ["model_a","model_b"])},
+    "check_order": {"name": "check_order", "description": "以訂單編號或買家查交易/出貨/退款狀態",
+        "parameters": _p({"order_id": {"type": "string"}, "buyer": {"type": "string"}}, [])},
+    "book_viewing": {"name": "book_viewing", "description": "為指定刊登建立預約看車（狀態變更）",
+        "parameters": _p({"listing_id": {"type": "string"}, "datetime": {"type": "string"},
+                          "contact": {"type": "string"}}, ["listing_id","datetime","contact"])},
+    "create_ticket": {"name": "create_ticket", "description": "建立客訴/退款工單（狀態變更）",
+        "parameters": _p({"category": {"type": "string"}, "description": {"type": "string"}}, ["category","description"])},
+    "escalate_to_human": {"name": "escalate_to_human", "description": "轉接真人客服（狀態變更）",
+        "parameters": _p({"reason": {"type": "string"}}, ["reason"])},
+}
+
+def schemas_for(domain: str) -> list[dict]:
+    return [TOOL_SCHEMAS[n] for n in TOOL_GROUPS[domain]]
