@@ -1634,7 +1634,7 @@ class Orchestrator:
         self.memory.append_message(sid, "user", user_input)
 
         # 2) rewrite -> route
-        rw = rewrite(self.llm, self.store, sid, user_input)
+        rw = rewrite(self.llm, self.memory, sid, user_input)   # rewrite needs SessionStore (.get/.resolve_reference)
         rt = route(self.llm, rw["rewritten_query"])
         tokens = rw["tokens"] + rt["tokens"]
         label = rt["label"]
