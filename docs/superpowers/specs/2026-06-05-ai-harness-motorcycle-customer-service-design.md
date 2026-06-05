@@ -30,20 +30,27 @@
 ┌───────────────────────────▼─────────────────────────────┐
 │                     Orchestrator                          │
 │                                                           │
-│  ① Intent Router (LLM)                                    │
-│      分類使用者意圖 → {找車推薦, 規格比較, 交易訂單,        │
-│                       售後轉真人, 閒聊/範圍外}             │
-│                            │ 分派                          │
-│  ② Domain Handler                                         │
-│      掛載該領域工具子集，執行 Gemini function-calling 迴圈  │
+│  ① Query Rewriter (LLM)                                   │
+│      改寫使用者輸入：消歧義、補上下文、解析指代            │
+│      （例「第一台」→ listing_id），輸出精準化 query        │
+│                            │ 精準化 query                  │
+│  ② Intent Router (LLM)                                    │
+│      （精準化 query + 情境判斷 system prompt）              │
+│      分類意圖 → {找車推薦, 規格比較, 交易訂單,             │
+│                 售後轉真人, 閒聊/範圍外}                   │
+│                            │ 分派（各情境獨立）            │
+│  ③ Domain Handler                                         │
+│      掛載該情境專屬 tool group，執行 Gemini                │
+│      function-calling 迴圈                                 │
 │                            │ 呼叫                          │
-│  ③ Tool Layer (8 個 function)                             │
+│  ④ Tool Layer (8 個 function，分屬 4 個 tool group)       │
 │      操作資料層、回傳結構化結果                             │
 │                            │ 讀寫                          │
-│  ④ Memory                                                 │
+│  ⑤ Memory                                                 │
 │      對話歷史 + 使用者偏好槽（budget/brand/usage/viewed）   │
+│      ← Query Rewriter 讀此記憶以解析指代與補上下文          │
 │                                                           │
-│  ⑤ Escalation                                             │
+│  ⑥ Escalation                                             │
 │      無法處理 → create_ticket → escalate_to_human         │
 └───────────────────────────┬─────────────────────────────┘
                             │
@@ -53,6 +60,12 @@
 │   orders（合成交易） · tickets（執行期建立）               │
 └──────────────────────────────────────────────────────────┘
 ```
+
+**處理管線（pipeline）**：每則使用者輸入依序經過 ① Query Rewriter → ② Intent Router → ③ Domain Handler（含 ④ Tool Layer 迴圈），全程讀寫 ⑤ Memory，必要時走 ⑥ Escalation。
+
+**為何先做 Query Rewriter**：使用者輸入常口語、模糊或含指代（「那台」「再幫我約」）。先用 LLM 結合對話記憶把 query 改寫成完整、明確、自含上下文的版本，可（a）大幅提升 Router 的情境分類準確率，（b）讓 Handler 抽取工具參數更精準。改寫後的 query 再搭配「情境判斷 system prompt」交給 Router。
+
+**情境獨立（domain isolation）**：四大情境彼此獨立，各自擁有專屬的 tool group 與 system prompt；Handler 只會看到該情境的工具子集，降低誤用工具的機率，也讓每個情境可獨立測試與擴充。
 
 **LLM + Tools + Memory** 三要素齊備，符合作業對 AI system architecture 的要求。
 
@@ -99,18 +112,21 @@
 範例請求：「30 萬內想要 Yamaha 跑車，再幫我約看車」
 
 ```
-使用者輸入
+使用者輸入：「30 萬內想要 Yamaha 跑車，再幫我約看車」
+  → Query Rewriter：改寫為「搜尋 asking_price ≤ 300000、品牌 Yamaha、用途 sport 的二手刊登」
   → Router 分類 = 找車推薦
   → Handler 迴圈：recommend(budget=300000, brand_pref="Yamaha", usage="sport")
       → 工具回傳 2 筆刊登 → 寫入 Memory(viewed_listings, budget, brand_pref, usage)
   → LLM 整理推薦回覆
 使用者：「第一台規格如何」
-  → Router = 規格比較 → get_listing_detail(listing_id) → 回覆規格 + 車況
+  → Query Rewriter：讀 Memory 解析「第一台」→ listing_id=L001
+  → Router = 規格比較 → get_listing_detail("L001") → 回覆規格 + 車況
 使用者：「幫我約週六看車」
-  → Router = 交易訂單 → book_viewing(listing_id, 週六, contact) → 確認預約
+  → Query Rewriter：補上下文 →「為 listing L001 預約本週六看車」
+  → Router = 交易訂單 → book_viewing("L001", 週六, contact) → 確認預約
 ```
 
-每一步產生 **decision trace**：`Router 判定 → 選用工具 → 參數 → 工具結果`。前端側欄即時顯示，報告與 evaluation 皆引用此 trace。
+每一步產生 **decision trace**：`原始輸入 → 改寫後 query → Router 判定 → 選用工具 → 參數 → 工具結果`。前端側欄即時顯示，報告與 evaluation 皆引用此 trace。
 
 ---
 
@@ -149,9 +165,10 @@
 
 ## 9. AI Orchestration（流程控制與決策）
 
-- **決策層**：Intent Router 以 LLM 分類意圖，決定走哪條領域路徑；領域內由 Gemini function calling 自主決定工具呼叫順序與參數。
-- **控制流**：Orchestrator 串接 Router → Handler → Tools → Memory → Response，並掌管 escalation 出口。
-- **可解釋性**：每次互動輸出 decision trace，確保決策過程可追蹤、可評估，符合「邏輯一致性與可解釋性」要求。
+- **前處理層**：Query Rewriter 以 LLM 結合對話記憶，把模糊/含指代的輸入改寫成精準、自含上下文的 query，作為後續決策的乾淨輸入。
+- **決策層**：Intent Router 以（精準化 query + 情境判斷 system prompt）分類意圖，決定走哪條領域路徑；領域內由 Gemini function calling 自主決定工具呼叫順序與參數。
+- **控制流**：Orchestrator 串接 Query Rewriter → Router → Handler → Tools → Memory → Response，並掌管 escalation 出口。各情境獨立、tool group 互不重疊。
+- **可解釋性**：每次互動輸出 decision trace（含改寫前後 query），確保決策過程可追蹤、可評估，符合「邏輯一致性與可解釋性」要求。
 
 ---
 
@@ -171,11 +188,12 @@
 HW4/
   app.py                      # Flask 入口
   harness/
-    router.py                 # Intent Router（LLM 意圖分類）
-    handlers.py               # 四大領域 handler（function-calling 迴圈）
-    tools.py                  # 8 個工具 function + JSON schema
+    rewriter.py               # Query Rewriter（改寫精準化、解析指代）
+    router.py                 # Intent Router（情境分類）
+    handlers.py               # 四大情境 handler（各自 tool group，function-calling 迴圈）
+    tools.py                  # 8 個工具 function + JSON schema（分 4 tool group）
     memory.py                 # 對話歷史 + 偏好槽
-    orchestrator.py           # 串接各層、escalation 控制
+    orchestrator.py           # 串接各層（rewriter→router→handler）、escalation 控制
   data/
     catalog.py                # 載入 product_dataset.csv
     listings.py               # 合成二手刊登（固定 seed）
