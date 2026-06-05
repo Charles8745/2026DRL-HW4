@@ -50,7 +50,7 @@ python app.py                 # 啟動 Flask，開 http://localhost:5000
 ## 測試
 
 ```bash
-python -m pytest -q           # 62 個單元測試，全程使用 FakeLLM，不需 API key、不花費用
+python -m pytest -q           # 68 個單元測試，全程使用 FakeLLM，不需 API key、不花費用
 ```
 
 ## 評估

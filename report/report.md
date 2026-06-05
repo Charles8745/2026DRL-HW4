@@ -104,7 +104,9 @@ T4 使用者：確認 → 實際執行 book_viewing → 建立預約
 | 回答忠實度（groundedness） | 規則比對價格/規格為主且權威；LLM-as-judge 為輔 | 違規數 = 0 |
 | 運營指標 | 平均延遲；平均工具步數；**每輪總 token＝累加該輪所有 Gemini 呼叫** | 在預算內 |
 
-> **量測結果**：本報告交付時測試以離線 `FakeLLM` 驗證系統邏輯（62 個單元測試全綠、零 API 成本）。對真實 Gemini 的端到端指標由 `python -m eval.run_eval` 產生；執行後將輸出表貼於此（router_accuracy / task_success / avg_latency / avg_tokens / PASS）。
+groundedness 以**規則比對為主**：蒐集該輪工具回傳的所有價格，檢查回覆中的價格是否皆有依據（`groundedness_violations`），違規率納入 PASS 門檻。`run_eval` 對 confirmation 類工具以「proposed step」計分（提議即代表正確選用工具）；跨情境的多輪任務（如「推薦→約看車」第二個工具落在另一情境）以**主意圖工具**計分，其跨輪串接由 orchestrator 單元測試（兩輪確認、指代解析）驗證。
+
+> **量測結果**：本報告交付時測試以離線 `FakeLLM` 驗證系統邏輯（**68 個單元測試全綠**、零 API 成本）。對真實 Gemini 的端到端指標由 `python -m eval.run_eval` 產生；執行後將輸出表貼於此（router_accuracy / task_success / groundedness_violation_rate / avg_latency / avg_tokens / PASS）。
 
 ## 8. 結論
 
