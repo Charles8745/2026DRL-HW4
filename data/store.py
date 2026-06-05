@@ -9,12 +9,13 @@ class DataStore:
         self.orders = synth_orders(self.listings, seed=seed)
         self.tickets: list[dict] = []
         self._catalog_by_title = {c["title"]: c for c in self.catalog}
+        self._listings_by_id = {l["listing_id"]: l for l in self.listings}
 
     def catalog_for(self, title: str) -> dict | None:
         return self._catalog_by_title.get(title)
 
     def listing(self, listing_id: str) -> dict | None:
-        return next((l for l in self.listings if l["listing_id"] == listing_id), None)
+        return self._listings_by_id.get(listing_id)
 
     def add_ticket(self, category: str, description: str) -> dict:
         t = {"ticket_id": f"T{len(self.tickets)+1:03d}", "category": category,
