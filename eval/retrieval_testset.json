@@ -1,0 +1,18 @@
+[
+  {"id": "rt-01", "query": "新手第一台，市區通勤、輕巧好停又省油", "relevant_models": ["MT-15", "CB300R"]},
+  {"id": "rt-02", "query": "想跑長途環島，坐姿舒適、配備旅行風鏡的大型旅跑車", "relevant_models": ["Ninja H2SX SE (ZX1002-R)", "CB1000GT"]},
+  {"id": "rt-03", "query": "預算內最有賽道戰鬥感的頂級仿賽", "relevant_models": ["Ninja ZX-10R (ZX-1002L)", "YZF-R9"]},
+  {"id": "rt-04", "query": "大型運動速克達，通勤實用又要有性能", "relevant_models": ["TMAX", "X-ADV"]},
+  {"id": "rt-05", "query": "喜歡復古經典造型的街車", "relevant_models": ["CB1000F", "Z 650RS (ER650-R)"]},
+  {"id": "rt-06", "query": "想學打檔，新手練習、耐摔好維護的越野車", "relevant_models": ["CRF300L"]},
+  {"id": "rt-07", "query": "中量級雙缸 naked，好上手又好玩", "relevant_models": ["MT-07", "Z 650 (ER650-S)"]},
+  {"id": "rt-08", "query": "入門黃牌速克達，平日買菜代步", "relevant_models": ["FORZA350", "ADV350"]},
+  {"id": "rt-09", "query": "大型冒險車，能跑長途越野旅行", "relevant_models": ["Ténéré 700", "AFRICA TWIN ADVENTURE SPORTS ES DCT"]},
+  {"id": "rt-10", "query": "大排量街頭暴力 naked、動力強勁", "relevant_models": ["Z 900 (ZR900-F)", "CB1000 Hornet SP"]},
+  {"id": "rt-11", "query": "輕量入門小跑車，好入手的仿賽", "relevant_models": ["YZF-R3", "CBR500R"]},
+  {"id": "rt-12", "query": "高轉四缸小排量仿賽", "relevant_models": ["Ninja ZX-4RR (ZX400-S)"]},
+  {"id": "rt-13", "query": "座高低、嬌小騎士也好駕馭的車", "relevant_models": ["ELIMINATOR 500 SE (EL450-B)", "Ninja 500 SE (EX500-J)"]},
+  {"id": "rt-14", "query": "美式巡航 cruiser，輕鬆騎乘", "relevant_models": ["ELIMINATOR 500 SE (EL450-B)"]},
+  {"id": "rt-15", "query": "中量級運動旅跑，可通勤也可熱血", "relevant_models": ["CBR650R E-Clutch"]},
+  {"id": "rt-16", "query": "中大型三缸街車，玩樂取向", "relevant_models": ["MT-09 Y-AMT"]}
+]

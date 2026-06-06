@@ -1,0 +1,6 @@
+[
+  {"id": "sem-01", "input": "新手想找好上手、市區通勤又省油的車", "expected_tools": ["semantic_search"], "expected_domain": "找車推薦"},
+  {"id": "sem-02", "input": "想要能跑長途環島、坐起來舒服的車", "expected_tools": ["semantic_search"], "expected_domain": "找車推薦"},
+  {"id": "sem-03", "input": "喜歡有戰鬥感、騎起來熱血的車", "expected_tools": ["semantic_search"], "expected_domain": "找車推薦"},
+  {"id": "sem-04", "input": "想找一台復古經典造型、騎著有味道的車", "expected_tools": ["semantic_search"], "expected_domain": "找車推薦"}
+]
