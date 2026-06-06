@@ -20,10 +20,16 @@ def create_app(orchestrator):
 
 def _build_default():
     from harness.openai_client import OpenAIClient
+    from harness.embedder import OpenAIEmbedder
+    from harness.reranker import LLMReranker
+    from harness.retrieval.retriever import HybridRetriever
     from data.store import DataStore
     from harness.memory import SessionStore
     from harness.orchestrator import Orchestrator
-    return create_app(Orchestrator(OpenAIClient(), DataStore(seed=42), SessionStore()))
+    llm = OpenAIClient()
+    store = DataStore(seed=42)
+    store.retriever = HybridRetriever(store.catalog, OpenAIEmbedder(), LLMReranker(llm))
+    return create_app(Orchestrator(llm, store, SessionStore()))
 
 if __name__ == "__main__":
     _build_default().run(debug=True, port=5000)

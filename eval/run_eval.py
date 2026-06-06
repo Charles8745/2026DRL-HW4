@@ -84,12 +84,18 @@ def main():
     args = ap.parse_args()
 
     from harness.openai_client import OpenAIClient
+    from harness.embedder import OpenAIEmbedder
+    from harness.reranker import LLMReranker
+    from harness.retrieval.retriever import HybridRetriever
     from data.store import DataStore
     from harness.memory import SessionStore
     from harness.orchestrator import Orchestrator
     cases = json.load(open("eval/testset.json", encoding="utf-8"))
     batch = select_cases(cases, args.offset, args.limit)
-    orch = Orchestrator(OpenAIClient(), DataStore(seed=42), SessionStore())
+    llm = OpenAIClient()
+    store = DataStore(seed=42)
+    store.retriever = HybridRetriever(store.catalog, OpenAIEmbedder(), LLMReranker(llm))
+    orch = Orchestrator(llm, store, SessionStore())
     report = run(orch, batch, sleep_s=args.sleep)
     print(f"# batch: offset={args.offset} limit={args.limit} -> {len(batch)} cases "
           f"({batch[0]['id']}..{batch[-1]['id']})" if batch else "# batch: empty")

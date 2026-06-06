@@ -17,6 +17,9 @@ import config
 from eval.run_eval import score_case, score_multiturn, THRESHOLDS
 from harness.openai_client import OpenAIClient
 from harness.llm import LLMResponse
+from harness.embedder import OpenAIEmbedder
+from harness.reranker import LLMReranker
+from harness.retrieval.retriever import HybridRetriever
 from data.store import DataStore
 from harness.memory import SessionStore
 from harness.orchestrator import Orchestrator
@@ -96,7 +99,9 @@ def main():
     if args.limit is not None:
         cases = cases[:args.limit]
     client = ThrottledRetryClient(args.model, min_interval=args.min_interval)
-    orch = Orchestrator(client, DataStore(seed=42), SessionStore())
+    store = DataStore(seed=42)
+    store.retriever = HybridRetriever(store.catalog, OpenAIEmbedder(), LLMReranker(client))
+    orch = Orchestrator(client, store, SessionStore())
 
     rows = []
     for i, c in enumerate(cases):
