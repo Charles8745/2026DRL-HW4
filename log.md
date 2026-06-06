@@ -86,3 +86,22 @@
 **真實量測**（gpt-4.1-mini，27 題、0 error）：router 0.889、task_success 0.593、groundedness 違規率 0.222、PASS=false（誠實未達門檻，分析見 report §7.2）。原始數據 `eval/results.json`。
 
 > 問題→修正範例（本階段）：先試 `gemini-2.5-flash-lite` 跑 eval，發現每日上限僅 20 → 4 題後整批 429 且每題空轉 ~480s。改為偵測 `limit: 0` 與每日配額後判定免費額度不可行 → 遷移 OpenAI，全 27 題一次跑完。
+
+## G. 混合檢索階段：BM25 + 向量(RAG) + Rerank（2026-06-07）
+
+**動機**：找車推薦只有結構化精確篩選（brand/price/year/usage），接不住「新手通勤想省油好停、偶爾跑山」這類無結構化條件的自然語言查詢；型錄豐富描述完全未用於檢索。新增唯讀工具 `semantic_search` + 獨立 `HybridRetriever`（BM25 jieba 斷詞 + OpenAI 向量 + RRF 融合 + gpt-4.1-mini listwise rerank），對 33 款型錄檢索後展開為在售刈登。
+
+**流程與 AI 協作**：走 brainstorming → spec → 對抗式審查 → writing-plans → TDD 實作 → 對抗式 code review。三項使用者拍板的設計決策：(1) 目標兩者並重、(2) 語料以型錄車款為索引單位、(3) 技術棧選「OpenAI 原生・輕量」（`Embedder`/`Reranker` Protocol + Fake 保離線，而非引入 torch/sentence-transformers）。
+
+**spec 對抗式審查（6 面向，commit `0115066`）攔下 4 個真實 blocker**並修正：
+- groundedness「零改動」原本是假——`_facts_from_trace` 只看頂層，原設計的 `{models,listings}` wrapper dict 會使價格無法被收集 → **改為 `semantic_search` 回扁平 listing 清單**，groundedness 與序數指代真正零改動。
+- `set_viewed` 接線原為 no-op（dict 過不了 `isinstance(list)` 守衛）→ 扁平清單後僅需把工具名加進既有 tuple。
+- 「81 測試全綠」承諾為假——`test_tool_registry` 斷言每群 2 工具 → 明列為需同步更新（找車推薦變 3 工具）。
+- 移除索引持久化（33 篇建構時一次 embed，持久化為 gold-plating）；補上檢索指標形式定義與 ablation 重跑取均值；釘死 RRF/Fake* 決定性契約。
+
+**問題→修正範例（實作期，TDD/真跑攔截）**：
+1. `VectorStore` matmul 在全測試套件下噴 divide/overflow/invalid RuntimeWarning（矩陣其實有限，是洩漏的全域 FP 狀態）→ 以 `np.errstate` 包裹、並對零向量穩健。
+2. sem-* 端到端起初 grounded_rate=0.0 → 診斷發現被 flag 的 5 位數其實是**里程**（`_facts_from_trace` 只白名單價格）→ 在**新的** `run_sem` 用更完整的事實白名單（價格＋里程＋年份），不動凍結的主 eval 計分；grounded_rate→1.0。
+3. sem-02 觸發 `recommend` 缺 `budget` 參數使 `run_handler` 直接拋 `TypeError` → `run_sem` 比照 `run_full` 加 per-case try/except（不改凍結管線行為）。
+
+**成果**：120 個離線單元測試全綠（78→120，+42）。ablation（真實 OpenAI，16 題，report §7.4）：BM25 → +向量 → +Rerank 的 recall@1 = 0.375 → 0.375 → **0.688**、recall@5 = 0.625 → 0.688 → **0.812**、MRR = 0.549 → **0.752**、nDCG = 0.501 → **0.725**；向量把候選池天花板 recall@10 由 0.688 拉到 0.812（增召回）、rerank 在固定池內提升排序精度。sem-* 端到端（§7.5）：router 1.0 / 觸發 0.75 / grounded 1.0。**無回歸**：主 27 題 router 0.889 不變、groundedness 違規 0.222→0.185（改善），新檢索工具未劫持任何結構化找車查詢。spec `0115066`、plan `db036f4`，實作分多次 commit 於 `feat/hybrid-retrieval`。

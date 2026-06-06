@@ -19,7 +19,8 @@
   → ① Query Rewriter (LLM)     改寫精準化、解析指代「第一台」、偵測多意圖
   → ② Intent Router (LLM)      5 類意圖分類（4 情境 + 無工具 fallback）
   → ③ Domain Handler           該情境專屬 tool group，manual function-calling 迴圈
-  → ④ Tool Layer (8 function)  操作 DataStore，回傳結構化 JSON
+  → ④ Tool Layer (9 function)  操作 DataStore，回傳結構化 JSON
+       ⤷ 找車推薦含「混合檢索階段」semantic_search：BM25 + 向量(RAG) + Rerank（見 §2.1）
   ⑤ Memory：session 對話歷史 + 偏好槽（budget/brand_pref/usage/viewed_listings/pending_*）
   ⑥ Security & Governance：輸入/輸出防護、兩階段確認、單輪限額、稽核（橫切所有階段）
 ```
@@ -31,11 +32,29 @@
 | **Prompt** | 分層 system prompt（rewriter / router / 各情境 handler / fallback），集中於 `prompts.py` |
 | **Orchestration** | `Orchestrator` 串接 + `Intent Router` 決策 |
 | **核心迴圈 Context→Observe→Reason→Act** | Rewriter+Memory 組裝上下文 → Router 觀察分類 → Handler 推理選工具 → 執行工具/回覆 |
-| **Tools & Skills** | 8 個 function，分 4 領域 tool group |
+| **Tools & Skills** | 9 個 function，分 4 領域 tool group；找車推薦含混合檢索工具 `semantic_search` |
 | **Memory** | session-keyed 對話歷史 + 偏好槽 |
 | **Security & Governance** | `governance.py` + orchestrator 治理鉤子 |
 
 **資料層**：型錄為**真實 33 款車**（`product_dataset.csv`，欄位 `Title/Categories/Description/Price/...`）。載入時轉成正規化 `catalog`：`brand` 由 `Categories` 解析、`usage`（sport/naked/touring/adventure/scooter/cruiser）由人工維護的 33 款對照表標註、`specs` 由 `Description`【規格】區塊容錯解析。二手 `listings` 與 `orders` 以固定 seed 合成、折舊單調並設上下限、`model` 對型錄採精確字串 join。
+
+### 2.1 混合檢索階段（Hybrid Retrieval：BM25 + 向量 RAG + Rerank）
+
+「找車推薦」的結構化篩選（`search_listings`/`recommend`）接不住「新手通勤想省油好停、偶爾跑山」這類**無明確品牌/車種/價格條件**的自然語言查詢。為此新增唯讀工具 `semantic_search`，背後是獨立的三段混合檢索管線 `HybridRetriever`，對 **33 款型錄描述**檢索後展開為在售刈登：
+
+```
+改寫後查詢
+ ① BM25 稀疏檢索（jieba 中文斷詞）   ─┐
+ ② 向量(RAG)檢索（OpenAI embedding）─┤→ ③ RRF 融合(k=60) → 候選 top-10
+                                    ─┘
+ ④ Rerank（gpt-4.1-mini listwise 重排）→ top-5 車款
+ ⑤ 工具層展開為「在售」刈登（+ 預算/車種過濾）→ 回扁平 listing 清單
+```
+
+- **設計對稱性**：embedding 與 reranker 各抽象為 `Embedder`／`Reranker` Protocol（呼應既有 `LLM` Protocol），測試注入決定性的 `FakeEmbedder`／`FakeReranker` → 全離線、零成本、可重現。
+- **groundedness 沿用**：`semantic_search` 回**扁平 listing 清單**（與 `search_listings` 同形狀），既有價格忠實度檢查與「第一台」序數指代**零改動即生效**。
+- **優雅降級**：embedding 失敗退回純 BM25、rerank 不符契約退回 RRF 序。
+- 逐段貢獻量化見 §7.4（ablation）、端到端示範見 §7.5。
 
 ## 3. Function Calling / Tool Usage 機制
 
@@ -49,12 +68,13 @@
 
 **終止條件**：模型不再 emit tool call，或達單輪工具上限 / token 預算。程式上由 `harness/handlers.py:run_handler` 實作此迴圈，`harness/llm.py` 定義 `ToolCall`/`LLMResponse` 與 `LLM` Protocol，`openai_client.py` 解析回應的 `message.tool_calls` 與 `usage.total_tokens`。
 
-## 4. Tools 設計（8 個，分 4 領域）
+## 4. Tools 設計（9 個，分 4 領域）
 
 | 領域 | 工具 | 簽章 | 功能 |
 |---|---|---|---|
 | 找車推薦 | `search_listings` | `(brand_pref?, max_price?, year_from?, usage?)` | 篩選在售刊登（join 型錄 usage/specs） |
 | | `recommend` | `(budget, usage?, brand_pref?)` | 依預算/車種排序推薦 |
+| | `semantic_search` | `(query, budget?, usage?)` | 自然語言語意檢索（BM25+向量+Rerank），回在售刈登（§2.1） |
 | 規格比較 | `get_listing_detail` | `(listing_id)` | 單一刊登完整規格＋車況 |
 | | `compare_models` | `(model_a, model_b)` | 並排比較；缺值顯示「資料未提供」 |
 | 交易訂單 | `check_order` | `(order_id? / buyer?)` | 查交易/出貨/退款狀態 |
@@ -108,7 +128,7 @@ groundedness 以**規則比對為主**：蒐集該輪工具回傳的所有價格
 
 ### 7.1 量測結果
 
-**離線（主驗證）**：所有 LLM 存取經 `LLM` Protocol，注入 scripted `FakeLLM` → **78 個單元測試全綠**（零 API 成本、可重現），覆蓋 router／handler 工具迴圈／兩階段確認／groundedness 護欄／governance／OpenAI client 轉接層。
+**離線（主驗證）**：所有 LLM／embedding／rerank 存取經 `LLM`／`Embedder`／`Reranker` Protocol，注入 scripted `FakeLLM`／`FakeEmbedder`／`FakeReranker` → **120 個單元測試全綠**（零 API 成本、可重現），覆蓋 router／handler 工具迴圈／兩階段確認／groundedness 護欄／governance／OpenAI client 轉接層／混合檢索三段管線。
 
 **真實端到端**（backend = **OpenAI `gpt-4.1-mini`**，`temperature=0`；27 題一次跑完、0 error、108 次 API 呼叫含 4 題第二輪；`python -m eval.run_full`，原始數據見 `eval/results.json`）：
 
@@ -165,8 +185,38 @@ groundedness 以**規則比對為主**：蒐集該輪工具回傳的所有價格
 
 > 設計意義：此指標把「招牌的跨輪能力」從**只由單元測試驗證接線**，提升為**對真實模型的端到端量測**，誠實暴露 1/4 的真實鏈成功率與其斷點，而非以單輪主工具粉飾。
 
+### 7.4 檢索 ablation（BM25 → +向量 → +Rerank）
+
+對 16 題自然語言語意查詢（`eval/retrieval_testset.json`；gold 限**有在售刈登**的車款、依描述/規格證據標註、每題 1–3 款）量測三段管線的逐段貢獻（真實 OpenAI `text-embedding-3-small` + `gpt-4.1-mini`，**模型層車款檢索**；`python -m eval.retrieval_eval`，原始數據 `eval/retrieval_results.json`）：
+
+| 配置 | recall@1 | recall@3 | recall@5 | MRR@10 | nDCG@5 | recall@10（候選池天花板） |
+|---|---|---|---|---|---|---|
+| BM25 only | 0.375 | 0.562 | 0.625 | 0.549 | 0.501 | 0.688 |
+| + 向量(RRF) | 0.375 | 0.594 | 0.688 | 0.557 | 0.541 | **0.812** |
+| + Rerank（完整） | **0.688** | 0.688 | **0.812** | **0.752** | **0.725** | 0.812 |
+
+分析：
+- **向量(RAG) 的貢獻在「召回」**：把候選池天花板（recall@10）由 0.688 拉到 0.812——稠密語意檢索找回 BM25 純詞面漏掉的相關車款（如「熱血/戰鬥感」對應 sport）。
+- **Rerank 的貢獻在「排序精度」**：recall@1 由 0.375 躍升至 0.688、MRR 0.557→0.752、nDCG 0.541→0.725——在固定候選池內把相關車款重排到前面。完整配置與「+向量」的 recall@10 同為 0.812，印證 rerank **只在候選池內重排、不增召回**（如設計）。
+- 指標定義（binary relevance）：`recall@k = |rel∩topk| / min(|rel|,k)`、`MRR@10` 取首個命中、`nDCG@5` gain=1。含非決定性 rerank 的完整配置跑 3 次取均值，本批三項指標離散度為 0（穩定）。
+- 誠實定位：16 題為**方向性示意基準、非統計顯著**；薄 usage 類（cruiser=1、touring=2）取樣有限。
+
+### 7.5 檢索階段端到端（sem-* 案例）+ 無回歸
+
+主 27 題 testset **凍結不動**（保住 §7.1–7.3 數字，並有 `test_main_testset_frozen_at_27` 守門）；另設 4 題語意查詢 `eval/sem_testset.json` 驗證檢索階段**真的接進對話**（`python -m eval.run_sem`，`eval/sem_results.json`）：
+
+| 指標 | 數值 |
+|---|---|
+| router_accuracy | 1.00（4/4 正確路由到找車推薦） |
+| `semantic_search` 觸發率 | 0.75（3/4） |
+| groundedness | 1.00（4/4） |
+
+- **觸發率 0.75**：純情境查詢（新手通勤、戰鬥感、復古）穩定觸發 `semantic_search`；惟「跑長途環島舒服」這類**可被推斷為 usage（touring）**的查詢，模型有時改走結構化 `recommend`/`search_listings`——屬 retrieval 與 structured 工具間的邊界非決定性，兩路皆回 grounded 結果。
+- **groundedness 1.00**：扁平 listing 回傳使回覆引用的價格與里程皆可溯源至檢索到的刈登（此處同時白名單價格與里程；§7.1 主驗證的 `_facts_from_trace` 僅白名單價格，故對列出多筆里程的回覆較嚴格——兩者皆為真實量測、無捏造）。
+- **無回歸**（vs 遷移後基線 §7.1）：router 0.889 不變、groundedness 違規 0.222→0.185（改善）。task_success 0.630→0.556 的兩題變動為 find-02（在 `search_listings`↔`recommend` 兩個結構化工具間擺動，**非**被 `semantic_search` 劫持，已逐案驗證）與 oos-02（未改動情境的非決定性）；**新增的檢索工具未把任何結構化找車查詢導向 `semantic_search`**。
+
 ## 8. 結論
 
-本系統以 LLM 為控制器、function calling 為手段，完整實作標準 AI Harness 六大元件，並以情境隔離、兩階段確認、groundedness 護欄與結構化稽核確保**邏輯一致性與可解釋性**。所有 LLM 存取經 `LLM` Protocol 抽象，使整個 harness 可離線、可重現地單元測試（78 tests），並可無痛切換後端（本次由 Gemini 遷移至 OpenAI `gpt-4.1-mini`，管線零改動），是一個兼顧設計完整性與工程可驗證性的 AI 系統設計範例。
+本系統以 LLM 為控制器、function calling 為手段，完整實作標準 AI Harness 六大元件，並以情境隔離、兩階段確認、groundedness 護欄與結構化稽核確保**邏輯一致性與可解釋性**。找車推薦情境再加上 **BM25 + 向量(RAG) + Rerank 三段混合檢索階段**（§2.1），ablation 顯示向量召回與 rerank 排序各有清楚可量化的貢獻（§7.4）。所有 LLM／embedding／rerank 存取經 `LLM`／`Embedder`／`Reranker` Protocol 抽象，使整個 harness 可離線、可重現地單元測試（120 tests），並可無痛切換後端（本次由 Gemini 遷移至 OpenAI `gpt-4.1-mini`，管線零改動），是一個兼顧設計完整性與工程可驗證性的 AI 系統設計範例。
 
 *附：系統架構與 tool-chain 視覺化見 `report/infographic.html`／`infographic.png`；完整規格見 `docs/superpowers/specs/`；設計與開發歷程見 `log.md`。*
