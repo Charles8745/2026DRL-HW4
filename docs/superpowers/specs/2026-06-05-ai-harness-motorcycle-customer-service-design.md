@@ -41,7 +41,7 @@
 │                            │ 分派（各情境獨立）            │
 │  ③ Domain Handler ── 核心迴圈 ──┐                         │
 │      掛載該情境專屬 tool group   │ Observe→Reason→Act      │
-│      執行 Gemini function loop   └──↺ 未完成則續迴圈        │
+│      執行 OpenAI function loop   └──↺ 未完成則續迴圈        │
 │                            │ 呼叫                          │
 │  ④ Tool Layer (8 個 function，分屬 4 個 tool group)       │
 │      操作資料層、回傳結構化結果                             │
@@ -82,7 +82,7 @@
 |---|---|---|
 | **Context** | Query Rewriter + Memory + 情境 system prompt | 組裝本輪上下文：改寫後的精準 query、使用者偏好槽、該情境提示 |
 | **Observe** | Router 分類 + 觀察工具回傳 | 觀察當前狀態：分類意圖、讀取上一輪工具結果 |
-| **Reason** | Handler LLM（Gemini function calling）| 推理「該呼叫哪個工具、帶什麼參數」或是否已可作答 |
+| **Reason** | Handler LLM（OpenAI function calling）| 推理「該呼叫哪個工具、帶什麼參數」或是否已可作答 |
 | **Act** | 執行工具呼叫 / 產生回覆 | 呼叫工具改變狀態或回覆使用者；若任務未完成則回到 Observe |
 
 迴圈持續到任務完成或觸發 escalation。每一圈都產生 decision trace。
@@ -104,7 +104,7 @@
 
 **LLM + Tools + Memory + Security/Governance** 元件齊備，符合作業對 AI system architecture 的要求。
 
-**LLM 後端**：Google Gemini API（function calling 透過 Gemini function declarations）。使用 `google-genai` SDK，預設模型 `gemini-2.0-flash`。API key 由使用者寫入 `.env`（`GEMINI_API_KEY=...`），以 `.env.example` 提供範本，`.env` 列入 `.gitignore`。
+**LLM 後端**：OpenAI API（function calling 透過 tool/function schemas (OpenAI tools)）。使用 `openai` SDK，預設模型 `gpt-4.1-mini`。API key 由使用者寫入 `.env`（`OPENAI_API_KEY=...`），以 `.env.example` 提供範本，`.env` 列入 `.gitignore`。
 
 ---
 
@@ -132,7 +132,7 @@
 
 ## 4. 工具設計（Tool / Function Design）
 
-共 **8 個 function**，依四大領域分組（遠超「至少 3 個」之要求）。每個工具有明確 JSON schema（name, description, parameters），由 Gemini 以 function calling 決定何時呼叫。
+共 **8 個 function**，依四大領域分組（遠超「至少 3 個」之要求）。每個工具有明確 JSON schema（name, description, parameters），由 OpenAI 以 function calling 決定何時呼叫。
 
 | 領域 | 工具 | 簽章 | 功能 |
 |---|---|---|---|
@@ -151,14 +151,14 @@
 
 本系統採 **manual function-call 迴圈**（關閉 SDK 自動代呼），以便每步攔截、產生 decision trace、並執行 §8 單輪工具上限。一輪的往返流程：
 
-1. **送出**：app 把該情境 tool group 的 **function declarations**（每個工具的 `name`/`description`/`parameters` JSON schema）連同對話與 system prompt 一起送進 Gemini。
-2. **模型決策**：Gemini 回傳的是**結構化 `function_call(name, args)`**（而非自然語言），代表它決定呼叫哪個工具、帶什麼參數。
-3. **執行**：app 端攔截該 `function_call`，dispatch 到對應的 Python 工具實際執行。
-4. **回填**：工具結果包成 **`function_response`(JSON)** 餵回模型。
-5. **續推理**：模型據此續寫——可再 emit 下一個 `function_call`（單輪可多次往返，multi-tool loop），或產生最終自然語言回覆。
+1. **送出**：app 把該情境 tool group 的 **tool/function schemas (OpenAI tools)**（每個工具的 `name`/`description`/`parameters` JSON schema）連同對話與 system prompt 一起送進 OpenAI。
+2. **模型決策**：OpenAI 回傳的是**結構化 `tool_calls (name, arguments)`**（而非自然語言），代表它決定呼叫哪個工具、帶什麼參數。
+3. **執行**：app 端攔截該 `tool_calls`，dispatch 到對應的 Python 工具實際執行。
+4. **回填**：工具結果包成 **文字工具結果訊息 (provider-neutral text message)(JSON)** 餵回模型。
+5. **續推理**：模型據此續寫——可再 emit 下一個 `tool_calls`（單輪可多次往返，multi-tool loop），或產生最終自然語言回覆。
 
-**終止條件**：模型不再 emit `function_call`（已可作答），或達 §8 單輪工具呼叫上限 / token 預算。
-*最小範例*：`recommend(budget,usage,brand_pref)` → 模型 emit `function_call` → app 執行回 2 筆 → `function_response` → 模型輸出推薦文字。
+**終止條件**：模型不再 emit `tool_calls`（已可作答），或達 §8 單輪工具呼叫上限 / token 預算。
+*最小範例*：`recommend(budget,usage,brand_pref)` → 模型 emit `tool_calls` → app 執行回 2 筆 → 文字工具結果訊息 (provider-neutral text message) → 模型輸出推薦文字。
 
 ---
 
@@ -239,7 +239,7 @@
 | 工具 / 路由選擇準確率 | 5 類標籤分類；fallback/低信心預測**僅當** gold=`閒聊/範圍外` 時算對 | 準確率 ≥ 90% |
 | 任務成功率（end-to-end） | 可驗證述詞：**呼叫了預期工具且參數正確**（如 `book_viewing` 真的以正確 listing_id/時間建立紀錄）**且**最終答案含正確事實 | 成功率 ≥ 85% |
 | 回答忠實度（groundedness） | **規則比對為主且權威**：答案中每個價格/cc/hp/車況須與工具回傳 JSON 完全一致（結構化 diff）；LLM-as-judge 為**輔**，只判釋義/語意忠實 | 事實子集違規數 = 0 |
-| 運營指標 | 平均回應延遲；平均工具呼叫步數；**每輪總 token＝累加該輪所有 Gemini 呼叫**（Rewriter＋Router＋每個 Handler round）的 `usage_metadata.total_token_count`，非只讀最後一次 | 步數/token 在 §8 預算內 |
+| 運營指標 | 平均回應延遲；平均工具呼叫步數；**每輪總 token＝累加該輪所有 OpenAI 呼叫**（Rewriter＋Router＋每個 Handler round）的 `usage.total_tokens`，非只讀最後一次 | 步數/token 在 §8 預算內 |
 
 **LLM-as-judge rubric**：judge 輸入＝模型答案＋工具回傳事實（testset 的 `ground_truth_facts`），輸出＝faithful / unfaithful＋理由；**規則比對與 judge 衝突時以規則為準**。為降低自評偏誤，judge 模型與作答模型分離（或至少明定「規則比對」才是 pass/fail 依據）。
 
@@ -250,7 +250,7 @@
 ## 10. AI Orchestration（流程控制與決策）
 
 - **前處理層**：Query Rewriter 以 LLM 結合對話記憶，把模糊/含指代的輸入改寫成精準、自含上下文的 query，作為後續決策的乾淨輸入。
-- **決策層**：Intent Router 以（精準化 query + 情境判斷 system prompt）分類意圖（5 類，含無工具 fallback），決定走哪條領域路徑；領域內由 Gemini function calling 自主決定工具呼叫順序與參數。
+- **決策層**：Intent Router 以（精準化 query + 情境判斷 system prompt）分類意圖（5 類，含無工具 fallback），決定走哪條領域路徑；領域內由 OpenAI function calling 自主決定工具呼叫順序與參數。
 - **多意圖處理**：Rewriter 偵測複合輸入並拆成有序子意圖。本原型採「**單輪處理主意圖 ＋ 次意圖延後**」策略：當前輪只跑主意圖，對尚缺前置條件的次意圖**明確告知並暫存** `Memory.pending_intent`，條件達成（如已選定車輛）後回收，**不靜默丟棄**使用者請求（非並行多 handler，以降低複雜度）。
 - **函式呼叫迴圈**：Handler 採 manual function-call 迴圈（見 §4.1），逐步攔截以產生 decision trace 並執行 §8 單輪工具上限。
 - **控制流**：Orchestrator 串接 Query Rewriter → Router → Handler → Tools → Memory → Response，並掌管 escalation 出口。各情境獨立、tool group 互不重疊。
@@ -262,7 +262,7 @@
 
 1. **書面報告（2–5 頁）**：濃縮全篇設計——問題定義與使用情境（§1）、系統架構與 AI orchestration（§2、§10）、LLM＋tools＋memory＋security/governance（§4、§6、§8）、function-calling 機制與工具設計（§4、§4.1，8 個工具）、多步驟 agent workflow（§5）、錯誤處理（§7）、evaluation 方法（§9）。（以**內容列舉**取代「第 X–Y 段」式引用，避免章節增改後失準。）
 2. **Infographic（資訊圖表）**：視覺化標準 AI Harness **六大元件**——Prompt 層、Orchestration（Router＋工具迴圈）、核心迴圈（Context→Observe→Reason→Act）、Tools & Skills（8 工具/4 group＋fallback）、Memory（偏好槽）、Security & Governance——並含 function calling / tool chain 與 workflow flow。以視覺陪伴工具設計版面後輸出 PNG。
-3. **log.md**：記錄本次 AI 輔助設計與開發全程。至少含：(a) 3–5 個關鍵設計決策與理由（如為何採 Approach B、為何前置 Query Rewriter、為何選 Gemini）；(b) 實際 prompt / 對話節錄；(c) 每次架構調整的前後對比與動機（如本次審查補強）；(d) ≥2 個具體問題分析與修正過程。
+3. **log.md**：記錄本次 AI 輔助設計與開發全程。至少含：(a) 3–5 個關鍵設計決策與理由（如為何採 Approach B、為何前置 Query Rewriter、為何選 OpenAI）；(b) 實際 prompt / 對話節錄；(c) 每次架構調整的前後對比與動機（如本次審查補強）；(d) ≥2 個具體問題分析與修正過程。
 
 ---
 
@@ -273,7 +273,7 @@
 ```
 HW4/
   app.py                      # Flask 入口
-  config.py                   # 讀 .env：GEMINI_API_KEY、GEMINI_MODEL（預設 gemini-2.0-flash）
+  config.py                   # 讀 .env：OPENAI_API_KEY、OPENAI_MODEL（預設 gpt-4.1-mini）
   harness/
     rewriter.py               # Query Rewriter（改寫精準化、解析指代、多意圖偵測）
     router.py                 # Intent Router（5 類分類，含無工具 fallback）
@@ -295,7 +295,7 @@ HW4/
   product_dataset.csv         # 既有型錄資料
   log.md
   requirements.txt
-  .env.example                # GEMINI_API_KEY、GEMINI_MODEL 範本
+  .env.example                # OPENAI_API_KEY、OPENAI_MODEL 範本
   .gitignore                  # 排除 .env、.superpowers/、__pycache__
   README.md
 ```
@@ -306,7 +306,7 @@ HW4/
 
 | 項目 | 選擇 |
 |---|---|
-| LLM 後端 | Google Gemini API（`google-genai`，模型由 `GEMINI_MODEL` env 指定，預設 `gemini-2.0-flash`），manual function calling；`requirements.txt` 釘版本範圍 |
+| LLM 後端 | OpenAI API（`openai`，模型由 `OPENAI_MODEL` env 指定，預設 `gpt-4.1-mini`），manual function calling；`requirements.txt` 釘版本範圍 |
 | 後端框架 | Flask（**本機長駐行程**；如需雲端用單一長駐實例如 Render/Railway/Fly.io）。**不建議 Vercel serverless**——無狀態/短暫，會破壞 in-memory Memory/tickets/bookings |
 | 前端 | HTML/CSS/JS 聊天 UI + decision trace 側欄 |
 | 資料 | pandas 載入 CSV；in-memory 合成 listings/orders |

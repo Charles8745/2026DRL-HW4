@@ -23,7 +23,7 @@
 
 3. **前置 Query Rewriter 階段**（在 Router 之前）。理由：使用者輸入常口語、含指代（「第一台」「再幫我約」）。先改寫成精準、自含上下文的 query，能提升路由準確率與工具參數抽取品質。
 
-4. **LLM 後端選 Google Gemini**（使用者指定），透過 `LLM` Protocol 抽象。理由：抽象層讓所有元件可用 scripted `FakeLLM` 離線單元測試，零 API 成本、可重現。
+4. **LLM 後端：OpenAI `gpt-4.1-mini`**（最初依使用者指定選 Gemini，2026-06-06 因該 key 免費額度受限遷移至 OpenAI——見 §F），透過 `LLM` Protocol 抽象。理由：抽象層讓所有元件可用 scripted `FakeLLM` 離線單元測試，零 API 成本、可重現，**且後端可無痛替換**（遷移時管線零改動，僅換一個 client class）。
 
 5. **部署採本機長駐行程而非 Vercel**。理由：審查發現 Vercel serverless 無狀態/短暫，會破壞 in-memory Memory / tickets / 跨輪指代解析。
 
@@ -31,7 +31,7 @@
 
 ## C. 與 AI 的互動／設計迭代（節錄）
 
-**釐清階段（一次一問）**：交付範圍 → 「設計文件 + 可跑原型」；場景 → 「智能客服」→ 具體化為「二手重機平台」；資料定位 → 「型錄當知識庫 + 合成二手刊登」；能力 → 四大情境全選；原型形式 → 「Flask 可部署 web 聊天」；後端 → 先 OpenAI 後改 Gemini；evaluation → 四面向全選。
+**釐清階段（一次一問）**：交付範圍 → 「設計文件 + 可跑原型」；場景 → 「智能客服」→ 具體化為「二手重機平台」；資料定位 → 「型錄當知識庫 + 合成二手刊登」；能力 → 四大情境全選；原型形式 → 「Flask 可部署 web 聊天」；後端 → OpenAI（`gpt-4.1-mini`；中途曾改 Gemini，後因額度受限遷回 OpenAI，見 §F）；evaluation → 四面向全選。
 
 **架構迭代**（git 可見）：
 - `f229185` 加入 Query Rewriter 前置階段。
@@ -68,7 +68,21 @@
 
 ## E. 成果
 
-- **62 個單元測試全綠**（全程 FakeLLM，離線、零 API 成本、可重現）。
+- **78 個單元測試全綠**（全程 FakeLLM，離線、零 API 成本、可重現）。
 - 完整 harness：資料層 → 8 工具 → memory/governance → rewriter/router/handler/orchestrator → Flask 聊天 UI + Decision Trace 側欄 → evaluation（27 題）。
 - 三項交付物：書面報告、infographic、本 log.md。
 - 每階段經兩階段審查（spec 合規 + 程式品質）通過後才進入下一階段。
+
+---
+
+## F. 後端遷移：Gemini → OpenAI（2026-06-06）
+
+**動機**：實跑 evaluation 時發現可用的 Gemini API key 免費額度被異常限縮——`gemini-2.0-flash` 免費額度為 0（API 回 `limit: 0`）、`gemini-2.5-flash-lite` 僅 20 requests/day，而 27 題 eval 需約 110–135 次呼叫，無法跑出完整端到端指標。使用者改提供 OpenAI key，遂將後端整個換成 OpenAI `gpt-4.1-mini`。
+
+**為何幾乎零成本**：(a) 所有 LLM 存取走 `LLM` Protocol；(b) handler 工具迴圈以純文字回填工具結果（非 Gemini 專屬結構）。故只新增一個 `harness/openai_client.py`（實作 Protocol：訊息映射、Gemini decl→OpenAI tools schema 轉接、`tool_calls` 解析、`usage.total_tokens`，`temperature=0`），rewriter/router/handlers/orchestrator **一行不動**，70 個離線測試（FakeLLM、後端無關）全數續綠。設計亮點：`LLM` Protocol 抽象讓「換後端」成為一次性、可驗證的小改動。
+
+**新增/變更**：新增 `openai_client.py` + 8 個 client 單元測試（70→78）；`config.py` 改讀 `OPENAI_API_KEY`/`OPENAI_MODEL`（屬性名 `API_KEY`/`MODEL` 不變）；換 3 個建構點（app/run_eval/run_full）；`requirements.txt` `google-genai`→`openai`；刪 `gemini_client.py`；全庫文件 Gemini→OpenAI。
+
+**真實量測**（gpt-4.1-mini，27 題、0 error）：router 0.889、task_success 0.593、groundedness 違規率 0.222、PASS=false（誠實未達門檻，分析見 report §7.2）。原始數據 `eval/results.json`。
+
+> 問題→修正範例（本階段）：先試 `gemini-2.5-flash-lite` 跑 eval，發現每日上限僅 20 → 4 題後整批 429 且每題空轉 ~480s。改為偵測 `limit: 0` 與每日配額後判定免費額度不可行 → 遷移 OpenAI，全 27 題一次跑完。

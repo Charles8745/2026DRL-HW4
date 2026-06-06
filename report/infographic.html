@@ -54,7 +54,7 @@
 </head>
 <body>
   <h1>🏍️ <span class="em">RideButler</span> — 二手重機交易平台 AI 客服 Harness
-    <span class="tag">Gemini function calling</span><span class="tag">Router + 工具迴圈</span></h1>
+    <span class="tag">OpenAI function calling</span><span class="tag">Router + 工具迴圈</span></h1>
   <div class="sub">LLM 作為系統控制器，透過 function calling 串接平台資料與工具，端到端完成多步驟客服任務 · 對齊標準 AI Harness 六大元件</div>
 
   <!-- 6 canonical components -->
@@ -133,9 +133,9 @@
   <div class="panel rt">
     <h2>Function-Calling 機制（round-trip）</h2>
     <div class="rtsteps">
-      <div class="rtbox">① app 送 <b>function declarations</b> + 對話</div>
+      <div class="rtbox">① app 送 <b>tool schemas</b> + 對話</div>
       <span class="rtar">→</span>
-      <div class="rtbox">② Gemini 回 <b>function_call(name,args)</b></div>
+      <div class="rtbox">② OpenAI 回 <b>tool_calls(name,args)</b></div>
       <span class="rtar">→</span>
       <div class="rtbox">③ app 攔截並執行 Python 工具</div>
       <span class="rtar">→</span>

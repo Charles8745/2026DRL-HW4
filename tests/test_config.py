@@ -1,11 +1,11 @@
 import importlib, config
 
 def test_defaults_when_env_absent(monkeypatch):
-    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
     importlib.reload(config)
-    assert config.MODEL == "gemini-2.0-flash"
+    assert config.MODEL == "gpt-4.1-mini"
 
 def test_reads_env(monkeypatch):
-    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.0-pro")
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-4o-mini")
     importlib.reload(config)
-    assert config.MODEL == "gemini-2.0-pro"
+    assert config.MODEL == "gpt-4o-mini"

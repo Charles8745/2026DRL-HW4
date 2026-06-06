@@ -66,19 +66,19 @@ def run(orchestrator, cases: list[dict], sleep_s: float = 0.0) -> dict:
 
 def main():
     import argparse
-    ap = argparse.ArgumentParser(description="Run the RideButler evaluation testset against real Gemini.")
+    ap = argparse.ArgumentParser(description="Run the RideButler evaluation testset against real OpenAI.")
     ap.add_argument("--limit", type=int, default=None, help="max cases to run (batch size)")
     ap.add_argument("--offset", type=int, default=0, help="skip the first N cases (for batching)")
     ap.add_argument("--sleep", type=float, default=0.0, help="seconds to wait between cases (avoid 429)")
     args = ap.parse_args()
 
-    from harness.gemini_client import GeminiClient
+    from harness.openai_client import OpenAIClient
     from data.store import DataStore
     from harness.memory import SessionStore
     from harness.orchestrator import Orchestrator
     cases = json.load(open("eval/testset.json", encoding="utf-8"))
     batch = select_cases(cases, args.offset, args.limit)
-    orch = Orchestrator(GeminiClient(), DataStore(seed=42), SessionStore())
+    orch = Orchestrator(OpenAIClient(), DataStore(seed=42), SessionStore())
     report = run(orch, batch, sleep_s=args.sleep)
     print(f"# batch: offset={args.offset} limit={args.limit} -> {len(batch)} cases "
           f"({batch[0]['id']}..{batch[-1]['id']})" if batch else "# batch: empty")

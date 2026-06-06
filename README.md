@@ -2,7 +2,7 @@
 
 > **2026 Deep Reinforcement Learning — Homework 4（AI Harness Systems Design）**
 
-以大型語言模型（Google Gemini）作為系統控制器，透過 **function calling** 串接平台資料與工具，端到端處理二手重機買家的多步驟客服請求（找車、比規格、查訂單、售後轉真人）。重點在 **system design 思維**——AI 如何 tool use 與 decision-making——而非模型訓練。
+以大型語言模型（OpenAI `gpt-4.1-mini`）作為系統控制器，透過 **function calling** 串接平台資料與工具，端到端處理二手重機買家的多步驟客服請求（找車、比規格、查訂單、售後轉真人）。重點在 **system design 思維**——AI 如何 tool use 與 decision-making——而非模型訓練。
 
 ---
 
@@ -23,9 +23,9 @@
 
 | 路徑 | 說明 |
 |---|---|
-| `config.py` | 讀 `.env`（`GEMINI_API_KEY` / `GEMINI_MODEL`） |
+| `config.py` | 讀 `.env`（`OPENAI_API_KEY` / `OPENAI_MODEL`） |
 | `data/` | `spec_parser`（規格解析）、`catalog`（型錄＋brand/usage/specs）、`listings`/`orders`（合成）、`store`（DataStore） |
-| `harness/` | `llm`/`gemini_client`、`prompts`、`rewriter`、`router`、`handlers`、`tools`、`memory`、`governance`、`orchestrator` |
+| `harness/` | `llm`/`openai_client`、`prompts`、`rewriter`、`router`、`handlers`、`tools`、`memory`、`governance`、`orchestrator` |
 | `app.py` | Flask app factory：`GET /`、`POST /api/chat` |
 | `templates/`、`static/` | 聊天 UI + Decision Trace 側欄 |
 | `eval/` | `testset.json`（27 題）、`run_eval.py`（指標 + PASS/FAIL） |
@@ -37,7 +37,7 @@
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env          # 填入你的 GEMINI_API_KEY（從 https://aistudio.google.com/apikey 取得）
+cp .env.example .env          # 填入你的 OPENAI_API_KEY（從 https://platform.openai.com/api-keys 取得）
 ```
 
 ## 執行
@@ -50,13 +50,13 @@ python app.py                 # 啟動 Flask，開 http://localhost:5000
 ## 測試
 
 ```bash
-python -m pytest -q           # 70 個單元測試，全程使用 FakeLLM，不需 API key、不花費用
+python -m pytest -q           # 78 個單元測試，全程使用 FakeLLM，不需 API key、不花費用
 ```
 
 ## 評估
 
 ```bash
-python -m eval.run_eval                          # 全部 27 題（需 GEMINI_API_KEY）
+python -m eval.run_eval                          # 全部 27 題（需 OPENAI_API_KEY）
 python -m eval.run_eval --limit 8 --sleep 2      # 分批 8 題、每題間隔 2 秒（避開免費額度 429）
 python -m eval.run_eval --offset 8 --limit 8     # 下一批（第 9–16 題）
 ```

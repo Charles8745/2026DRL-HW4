@@ -1,0 +1,359 @@
+{
+  "model": "gpt-4.1-mini",
+  "rows": [
+    {
+      "id": "find-01",
+      "router_ok": true,
+      "tools_ok": false,
+      "grounded_ok": true,
+      "tokens": 1367,
+      "latency": 7.702664852142334,
+      "error": null,
+      "domain": "找車推薦"
+    },
+    {
+      "id": "find-02",
+      "router_ok": true,
+      "tools_ok": true,
+      "grounded_ok": false,
+      "tokens": 1804,
+      "latency": 5.269472599029541,
+      "error": null,
+      "domain": "找車推薦"
+    },
+    {
+      "id": "find-03",
+      "router_ok": true,
+      "tools_ok": true,
+      "grounded_ok": false,
+      "tokens": 2161,
+      "latency": 10.7795889377594,
+      "error": null,
+      "domain": "找車推薦"
+    },
+    {
+      "id": "find-04",
+      "router_ok": true,
+      "tools_ok": true,
+      "grounded_ok": false,
+      "tokens": 2601,
+      "latency": 9.316134929656982,
+      "error": null,
+      "domain": "找車推薦"
+    },
+    {
+      "id": "find-05",
+      "router_ok": true,
+      "tools_ok": true,
+      "grounded_ok": false,
+      "tokens": 6690,
+      "latency": 25.279322147369385,
+      "error": null,
+      "domain": "找車推薦"
+    },
+    {
+      "id": "spec-01",
+      "router_ok": true,
+      "tools_ok": true,
+      "grounded_ok": true,
+      "tokens": 804,
+      "latency": 4.1674089431762695,
+      "error": null,
+      "domain": "規格比較"
+    },
+    {
+      "id": "spec-02",
+      "router_ok": true,
+      "tools_ok": true,
+      "grounded_ok": false,
+      "tokens": 1047,
+      "latency": 4.913116216659546,
+      "error": null,
+      "domain": "規格比較"
+    },
+    {
+      "id": "spec-03",
+      "router_ok": true,
+      "tools_ok": false,
+      "grounded_ok": true,
+      "tokens": 688,
+      "latency": 3.8333382606506348,
+      "error": null,
+      "domain": "規格比較"
+    },
+    {
+      "id": "spec-04",
+      "router_ok": true,
+      "tools_ok": true,
+      "grounded_ok": true,
+      "tokens": 746,
+      "latency": 3.7390599250793457,
+      "error": null,
+      "domain": "規格比較"
+    },
+    {
+      "id": "spec-05",
+      "router_ok": true,
+      "tools_ok": false,
+      "grounded_ok": true,
+      "tokens": 647,
+      "latency": 2.759956121444702,
+      "error": null,
+      "domain": "規格比較"
+    },
+    {
+      "id": "txn-01",
+      "router_ok": true,
+      "tools_ok": true,
+      "grounded_ok": true,
+      "tokens": 768,
+      "latency": 2.970442056655884,
+      "error": null,
+      "domain": "交易訂單"
+    },
+    {
+      "id": "txn-02",
+      "router_ok": true,
+      "tools_ok": true,
+      "grounded_ok": true,
+      "tokens": 989,
+      "latency": 3.7873308658599854,
+      "error": null,
+      "domain": "交易訂單"
+    },
+    {
+      "id": "txn-03",
+      "router_ok": true,
+      "tools_ok": false,
+      "grounded_ok": true,
+      "tokens": 445,
+      "latency": 2.456936836242676,
+      "error": null,
+      "domain": "交易訂單"
+    },
+    {
+      "id": "txn-04",
+      "router_ok": true,
+      "tools_ok": true,
+      "grounded_ok": true,
+      "tokens": 747,
+      "latency": 2.9670467376708984,
+      "error": null,
+      "domain": "交易訂單"
+    },
+    {
+      "id": "txn-05",
+      "router_ok": true,
+      "tools_ok": false,
+      "grounded_ok": true,
+      "tokens": 456,
+      "latency": 2.0080509185791016,
+      "error": null,
+      "domain": "交易訂單"
+    },
+    {
+      "id": "after-01",
+      "router_ok": false,
+      "tools_ok": false,
+      "grounded_ok": true,
+      "tokens": 894,
+      "latency": 4.042870044708252,
+      "error": null,
+      "domain": "售後轉真人"
+    },
+    {
+      "id": "after-02",
+      "router_ok": true,
+      "tools_ok": false,
+      "grounded_ok": true,
+      "tokens": 548,
+      "latency": 3.700780153274536,
+      "error": null,
+      "domain": "售後轉真人"
+    },
+    {
+      "id": "after-03",
+      "router_ok": true,
+      "tools_ok": true,
+      "grounded_ok": true,
+      "tokens": 398,
+      "latency": 2.419398307800293,
+      "error": null,
+      "domain": "售後轉真人"
+    },
+    {
+      "id": "after-04",
+      "router_ok": true,
+      "tools_ok": false,
+      "grounded_ok": true,
+      "tokens": 496,
+      "latency": 2.863007068634033,
+      "error": null,
+      "domain": "售後轉真人"
+    },
+    {
+      "id": "after-05",
+      "router_ok": true,
+      "tools_ok": false,
+      "grounded_ok": true,
+      "tokens": 518,
+      "latency": 3.193932056427002,
+      "error": null,
+      "domain": "售後轉真人"
+    },
+    {
+      "id": "multi-01",
+      "router_ok": false,
+      "tools_ok": false,
+      "grounded_ok": true,
+      "tokens": 465,
+      "latency": 2.435290813446045,
+      "error": null,
+      "domain": "跨情境多輪"
+    },
+    {
+      "id": "multi-02",
+      "router_ok": true,
+      "tools_ok": true,
+      "grounded_ok": false,
+      "tokens": 8611,
+      "latency": 12.88604211807251,
+      "error": null,
+      "domain": "跨情境多輪"
+    },
+    {
+      "id": "multi-03",
+      "router_ok": true,
+      "tools_ok": true,
+      "grounded_ok": true,
+      "tokens": 836,
+      "latency": 3.097031831741333,
+      "error": null,
+      "domain": "跨情境多輪"
+    },
+    {
+      "id": "multi-04",
+      "router_ok": true,
+      "tools_ok": true,
+      "grounded_ok": true,
+      "tokens": 945,
+      "latency": 3.923591136932373,
+      "error": null,
+      "domain": "跨情境多輪"
+    },
+    {
+      "id": "oos-01",
+      "router_ok": true,
+      "tools_ok": true,
+      "grounded_ok": true,
+      "tokens": 336,
+      "latency": 3.0332117080688477,
+      "error": null,
+      "domain": "範圍外"
+    },
+    {
+      "id": "inj-01",
+      "router_ok": true,
+      "tools_ok": true,
+      "grounded_ok": true,
+      "tokens": 0,
+      "latency": 3.719329833984375e-05,
+      "error": null,
+      "domain": "injection"
+    },
+    {
+      "id": "oos-02",
+      "router_ok": false,
+      "tools_ok": false,
+      "grounded_ok": true,
+      "tokens": 452,
+      "latency": 2.038109064102173,
+      "error": null,
+      "domain": "範圍外"
+    }
+  ],
+  "metrics": {
+    "n": 27,
+    "router_accuracy": 0.8888888888888888,
+    "task_success": 0.5925925925925926,
+    "groundedness_violation_rate": 0.2222222222222222,
+    "avg_latency": 5.021598957203053,
+    "avg_tokens": 1350.3333333333333,
+    "errors": 0,
+    "PASS": false
+  },
+  "per_domain": {
+    "找車推薦": {
+      "n": 5,
+      "router_accuracy": 1.0,
+      "task_success": 0.8,
+      "groundedness_violation_rate": 0.8,
+      "avg_latency": 11.669436693191528,
+      "avg_tokens": 2924.6,
+      "errors": 0,
+      "PASS": false
+    },
+    "規格比較": {
+      "n": 5,
+      "router_accuracy": 1.0,
+      "task_success": 0.6,
+      "groundedness_violation_rate": 0.2,
+      "avg_latency": 3.8825758934020995,
+      "avg_tokens": 786.4,
+      "errors": 0,
+      "PASS": false
+    },
+    "交易訂單": {
+      "n": 5,
+      "router_accuracy": 1.0,
+      "task_success": 0.6,
+      "groundedness_violation_rate": 0.0,
+      "avg_latency": 2.837961483001709,
+      "avg_tokens": 681.0,
+      "errors": 0,
+      "PASS": false
+    },
+    "售後轉真人": {
+      "n": 5,
+      "router_accuracy": 0.8,
+      "task_success": 0.2,
+      "groundedness_violation_rate": 0.0,
+      "avg_latency": 3.2439975261688234,
+      "avg_tokens": 570.8,
+      "errors": 0,
+      "PASS": false
+    },
+    "跨情境多輪": {
+      "n": 4,
+      "router_accuracy": 0.75,
+      "task_success": 0.75,
+      "groundedness_violation_rate": 0.25,
+      "avg_latency": 5.585488975048065,
+      "avg_tokens": 2714.25,
+      "errors": 0,
+      "PASS": false
+    },
+    "範圍外": {
+      "n": 2,
+      "router_accuracy": 0.5,
+      "task_success": 0.5,
+      "groundedness_violation_rate": 0.0,
+      "avg_latency": 2.5356603860855103,
+      "avg_tokens": 394.0,
+      "errors": 0,
+      "PASS": false
+    },
+    "injection": {
+      "n": 1,
+      "router_accuracy": 1.0,
+      "task_success": 1.0,
+      "groundedness_violation_rate": 0.0,
+      "avg_latency": 3.719329833984375e-05,
+      "avg_tokens": 0.0,
+      "errors": 0,
+      "PASS": true
+    }
+  },
+  "api_calls": 96,
+  "api_retries": 0
+}

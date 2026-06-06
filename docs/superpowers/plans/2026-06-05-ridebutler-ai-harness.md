@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a runnable AI-harness customer-service system for a second-hand motorcycle marketplace — Gemini function calling, Flask web chat, Router + tool-loop orchestration over a catalog + synthetic listings/orders — plus an evaluation harness and the three HW4 deliverables.
+**Goal:** Build a runnable AI-harness customer-service system for a second-hand motorcycle marketplace — OpenAI function calling, Flask web chat, Router + tool-loop orchestration over a catalog + synthetic listings/orders — plus an evaluation harness and the three HW4 deliverables.
 
-**Architecture:** A request flows Orchestrator → Query Rewriter (LLM) → Intent Router (LLM, 5 classes incl. a no-tool fallback) → Domain Handler (manual Gemini function-calling loop over that domain's tool group) → Tools (pure functions over an in-memory `DataStore`) → session-keyed Memory, with cross-cutting Governance (input/output guards, two-phase confirmation for state-changing tools, per-turn limits, structured decision-trace/audit). All LLM access goes through a small `LLM` Protocol so every component is unit-tested with a scripted `FakeLLM` (no API calls in tests).
+**Architecture:** A request flows Orchestrator → Query Rewriter (LLM) → Intent Router (LLM, 5 classes incl. a no-tool fallback) → Domain Handler (manual OpenAI function-calling loop over that domain's tool group) → Tools (pure functions over an in-memory `DataStore`) → session-keyed Memory, with cross-cutting Governance (input/output guards, two-phase confirmation for state-changing tools, per-turn limits, structured decision-trace/audit). All LLM access goes through a small `LLM` Protocol so every component is unit-tested with a scripted `FakeLLM` (no API calls in tests).
 
-**Tech Stack:** Python 3.11, Flask, `google-genai` (Gemini), pandas (CSV load), pytest. Runs as a long-lived local process (not Vercel serverless — see spec §13).
+**Tech Stack:** Python 3.11, Flask, `openai` (OpenAI), pandas (CSV load), pytest. Runs as a long-lived local process (not Vercel serverless — see spec §13).
 
 **Spec:** `docs/superpowers/specs/2026-06-05-ai-harness-motorcycle-customer-service-design.md`
 
@@ -69,7 +69,7 @@ Router labels (exact strings used everywhere): `"找車推薦"`, `"規格比較"
 ```
 HW4/
   requirements.txt              # pinned deps
-  .env.example                  # GEMINI_API_KEY, GEMINI_MODEL
+  .env.example                  # OPENAI_API_KEY, OPENAI_MODEL
   config.py                     # load .env -> settings
   conftest.py                   # pytest path + shared fixtures
   product_dataset.csv           # existing catalog (33 rows)
@@ -83,7 +83,7 @@ HW4/
   harness/
     __init__.py
     llm.py                      # LLM Protocol, ToolCall/LLMResponse, FakeLLM
-    gemini_client.py            # GeminiClient implements LLM (google-genai)
+    openai_client.py            # OpenAIClient implements LLM (openai)
     tools.py                    # 8 tool functions + TOOL_GROUPS + schemas
     memory.py                   # SessionStore: per-session history + slots + ref resolution
     governance.py               # input/output guards, limits, confirm set
@@ -117,7 +117,7 @@ HW4/
 
 ```
 flask>=3.0,<4.0
-google-genai>=1.0,<2.0
+openai>=1.0,<2.0
 pandas>=2.0,<3.0
 python-dotenv>=1.0,<2.0
 pytest>=8.0,<9.0
@@ -126,13 +126,13 @@ pytest>=8.0,<9.0
 - [ ] **Step 2: Write `.env.example`**
 
 ```
-GEMINI_API_KEY=your-key-here
-GEMINI_MODEL=gemini-2.0-flash
+OPENAI_API_KEY=your-key-here
+OPENAI_MODEL=gpt-4.1-mini
 ```
 
 - [ ] **Step 3: Install + verify**
 
-Run: `python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt && python -c "import flask, google.genai, pandas, dotenv, pytest"`
+Run: `python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt && python -c "import flask, openai, pandas, dotenv, pytest"`
 Expected: no import error.
 
 - [ ] **Step 4: Commit**
@@ -154,14 +154,14 @@ git commit -m "chore: HW4 deps and env template"
 import importlib, config
 
 def test_defaults_when_env_absent(monkeypatch):
-    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
     importlib.reload(config)
-    assert config.MODEL == "gemini-2.0-flash"
+    assert config.MODEL == "gpt-4.1-mini"
 
 def test_reads_env(monkeypatch):
-    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.0-pro")
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-4o-mini")
     importlib.reload(config)
-    assert config.MODEL == "gemini-2.0-pro"
+    assert config.MODEL == "gpt-4o-mini"
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -177,8 +177,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-API_KEY = os.getenv("GEMINI_API_KEY", "")
-MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+API_KEY = os.getenv("OPENAI_API_KEY", "")
+MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
 MAX_TOOL_CALLS_PER_TURN = 6   # spec §8 per-turn cap
 ```
 
@@ -1147,10 +1147,10 @@ git commit -m "feat: governance guards, affirmative detection, turn budget"
 
 # Phase 5 — LLM abstraction + prompts
 
-### Task 5.1: LLM Protocol + FakeLLM + GeminiClient
+### Task 5.1: LLM Protocol + FakeLLM + OpenAIClient
 
 **Files:**
-- Create: `harness/llm.py`, `harness/gemini_client.py`
+- Create: `harness/llm.py`, `harness/openai_client.py`
 - Test: `tests/test_fake_llm.py`
 
 - [ ] **Step 1: Write the failing test** — `tests/test_fake_llm.py`
@@ -1205,39 +1205,53 @@ class FakeLLM:
         return resp
 ```
 
-- [ ] **Step 4: Write `harness/gemini_client.py`** (no unit test — exercised manually/integration; keep thin)
+- [ ] **Step 4: Write `harness/openai_client.py`** (no unit test — exercised manually/integration; keep thin)
 
 ```python
-from google import genai
-from google.genai import types
+import json
+from openai import OpenAI
 from harness.llm import LLMResponse, ToolCall
 import config
 
-class GeminiClient:
-    def __init__(self, api_key: str = None, model: str = None):
-        self.model = model or config.MODEL
-        self.client = genai.Client(api_key=api_key or config.API_KEY)
 
-    def generate(self, system, messages, tools=None) -> LLMResponse:
-        contents = []
-        for m in messages:
-            role = "user" if m["role"] == "user" else "model"
-            contents.append(types.Content(role=role, parts=[types.Part(text=m["content"])]))
-        cfg = types.GenerateContentConfig(system_instruction=system)
+def _to_openai_tools(decls):
+    return [{"type": "function",
+             "function": {"name": d["name"], "description": d.get("description", ""),
+                          "parameters": d.get("parameters", {"type": "object", "properties": {}})}}
+            for d in decls]
+
+
+def _to_openai_messages(system, messages):
+    out = [{"role": "system", "content": system}]
+    for m in messages:
+        role = "user" if m["role"] == "user" else "assistant"
+        out.append({"role": role, "content": m["content"]})
+    return out
+
+
+class OpenAIClient:
+    def __init__(self, api_key=None, model=None):
+        self.model = model or config.MODEL
+        self.client = OpenAI(api_key=api_key or config.API_KEY)
+
+    def generate(self, system, messages, tools=None):
+        kwargs = {"model": self.model, "messages": _to_openai_messages(system, messages), "temperature": 0}
         if tools:
-            cfg.tools = [types.Tool(function_declarations=tools)]
-            cfg.automatic_function_calling = types.AutomaticFunctionCallingConfig(disable=True)
-        resp = self.client.models.generate_content(model=self.model, contents=contents, config=cfg)
-        calls, text = [], None
-        cand = resp.candidates[0]
-        for part in cand.content.parts:
-            if getattr(part, "function_call", None):
-                calls.append(ToolCall(part.function_call.name, dict(part.function_call.args or {})))
-            elif getattr(part, "text", None):
-                text = (text or "") + part.text
-        tokens = getattr(resp, "usage_metadata", None)
-        return LLMResponse(text=text, tool_calls=calls,
-                           total_tokens=getattr(tokens, "total_token_count", 0) or 0)
+            kwargs["tools"] = _to_openai_tools(tools)
+            kwargs["tool_choice"] = "auto"
+            kwargs["parallel_tool_calls"] = False
+        resp = self.client.chat.completions.create(**kwargs)
+        msg = resp.choices[0].message
+        calls = []
+        for tc in (msg.tool_calls or []):
+            try:
+                args = json.loads(tc.function.arguments or "{}")
+            except json.JSONDecodeError:
+                args = {}
+            calls.append(ToolCall(tc.function.name, args))
+        usage = getattr(resp, "usage", None)
+        return LLMResponse(text=msg.content, tool_calls=calls,
+                           total_tokens=getattr(usage, "total_tokens", 0) or 0)
 ```
 
 - [ ] **Step 5: Run to verify pass**
@@ -1248,8 +1262,8 @@ Expected: PASS (1 passed).
 - [ ] **Step 6: Commit**
 
 ```bash
-git add harness/llm.py harness/gemini_client.py tests/test_fake_llm.py
-git commit -m "feat: LLM Protocol, FakeLLM, GeminiClient (manual function calling)"
+git add harness/llm.py harness/openai_client.py tests/test_fake_llm.py
+git commit -m "feat: LLM Protocol, FakeLLM, OpenAIClient (manual function calling)"
 ```
 
 ### Task 5.2: Prompts module
@@ -1753,11 +1767,11 @@ def create_app(orchestrator):
     return app
 
 def _build_default():
-    from harness.gemini_client import GeminiClient
+    from harness.openai_client import OpenAIClient
     from data.store import DataStore
     from harness.memory import SessionStore
     from harness.orchestrator import Orchestrator
-    return create_app(Orchestrator(GeminiClient(), DataStore(seed=42), SessionStore()))
+    return create_app(Orchestrator(OpenAIClient(), DataStore(seed=42), SessionStore()))
 
 if __name__ == "__main__":
     _build_default().run(debug=True, port=5000)
@@ -1860,8 +1874,8 @@ document.getElementById("composer").addEventListener("submit", async (e) => {
 
 - [ ] **Step 4: Manual verification**
 
-Run: `GEMINI_API_KEY=... GEMINI_MODEL=gemini-2.0-flash python app.py` then open `http://localhost:5000`, send "30萬內想要 Yamaha 跑車". Expect: a recommendation reply and a populated Decision Trace panel (router_label = 找車推薦, a `recommend` step).
-Expected: chat works end-to-end against real Gemini.
+Run: `OPENAI_API_KEY=... OPENAI_MODEL=gpt-4.1-mini python app.py` then open `http://localhost:5000`, send "30萬內想要 Yamaha 跑車". Expect: a recommendation reply and a populated Decision Trace panel (router_label = 找車推薦, a `recommend` step).
+Expected: chat works end-to-end against real OpenAI.
 
 - [ ] **Step 5: Commit**
 
@@ -1946,7 +1960,7 @@ git commit -m "feat: evaluation test set (27 labeled cases, quota-checked)"
 - Create: `eval/run_eval.py`
 - Test: `tests/test_run_eval.py`
 
-`score_case` is pure (testable with FakeLLM-backed orchestrator). `main()` wires the real Gemini client.
+`score_case` is pure (testable with FakeLLM-backed orchestrator). `main()` wires the real OpenAI client.
 
 - [ ] **Step 1: Write the failing test** — `tests/test_run_eval.py`
 
@@ -2008,12 +2022,12 @@ def run(orchestrator, cases: list[dict]) -> dict:
     return {"rows": rows, "metrics": metrics}
 
 def main():
-    from harness.gemini_client import GeminiClient
+    from harness.openai_client import OpenAIClient
     from data.store import DataStore
     from harness.memory import SessionStore
     from harness.orchestrator import Orchestrator
     cases = json.load(open("eval/testset.json", encoding="utf-8"))
-    orch = Orchestrator(GeminiClient(), DataStore(seed=42), SessionStore())
+    orch = Orchestrator(OpenAIClient(), DataStore(seed=42), SessionStore())
     report = run(orch, cases)
     print(json.dumps(report["metrics"], ensure_ascii=False, indent=2))
 
@@ -2042,7 +2056,7 @@ git commit -m "feat: evaluation runner with metrics + pass thresholds"
 **Files:**
 - Create: `README.md`
 
-- [ ] **Step 1: Write `README.md`** covering: project summary, architecture diagram link to spec, setup (`python -m venv`, `pip install -r requirements.txt`, copy `.env.example`→`.env`, add `GEMINI_API_KEY`), run (`python app.py`), test (`pytest -q`), eval (`python -m eval.run_eval`). Include the canonical example query.
+- [ ] **Step 1: Write `README.md`** covering: project summary, architecture diagram link to spec, setup (`python -m venv`, `pip install -r requirements.txt`, copy `.env.example`→`.env`, add `OPENAI_API_KEY`), run (`python app.py`), test (`pytest -q`), eval (`python -m eval.run_eval`). Include the canonical example query.
 
 - [ ] **Step 2: Commit**
 
@@ -2084,7 +2098,7 @@ git commit -m "docs: AI-Harness infographic (6 components + tool chain)"
 **Files:**
 - Create: `log.md`
 
-- [ ] **Step 1: Write `log.md`** with the required four parts: (a) 3–5 key design decisions + rationale (Approach B vs single ReAct; adding the Query Rewriter; Gemini backend; dropping Vercel); (b) real prompt/chat excerpts from this brainstorming session; (c) before/after of each architecture change (Query Rewriter pre-stage; Security & Governance + C-O-R-A alignment; the 24 review fixes); (d) ≥2 concrete problem→fix analyses (e.g. `usage` had no data source → hand-labeled table + sentinel; stateless-Vercel → long-lived process). Reference the git history (`git log --oneline`) as evidence.
+- [ ] **Step 1: Write `log.md`** with the required four parts: (a) 3–5 key design decisions + rationale (Approach B vs single ReAct; adding the Query Rewriter; OpenAI backend; dropping Vercel); (b) real prompt/chat excerpts from this brainstorming session; (c) before/after of each architecture change (Query Rewriter pre-stage; Security & Governance + C-O-R-A alignment; the 24 review fixes); (d) ≥2 concrete problem→fix analyses (e.g. `usage` had no data source → hand-labeled table + sentinel; stateless-Vercel → long-lived process). Reference the git history (`git log --oneline`) as evidence.
 
 - [ ] **Step 2: Commit**
 
@@ -2105,7 +2119,7 @@ git commit -m "docs: log.md design/development process record"
 
 ## Self-Review (completed by plan author)
 
-**Spec coverage:** §1 problem→9.2 report; §2 architecture→Phases 5–7; §2.1 C-O-R-A loop→handler loop (6.3); §2.3 prompts→5.2; §3 data layer→Phase 1 (brand parse, usage table, spec parser w/ sentinel, seeded depreciation, exact join); §4 8 tools→Phase 2; §4.1 function-calling round-trip→6.3 handler + 9.2 report; §5 workflow incl. multi-intent + confirmation→6.3/6.4 + multi-* test cases; §6 memory (session keying, ordered viewed_listings, ordinal rule, pending_intent/action)→3.1 + 6.4; §7 error handling→tool `ToolResult` envelopes + router fallback; §8 security/governance (input/output guard, two-phase confirmation, turn budget, structured trace)→Phase 4 + 6.3/6.4; §9 evaluation (quota, thresholds, router/task/groundedness/ops, token accumulation)→Phase 8; §10 orchestration→6.4; §11 deliverables→Phase 9 (report/infographic/log); §12 structure→matches File Structure; §13 tech (Gemini env, long-lived process)→0.1/0.2/5.1.
+**Spec coverage:** §1 problem→9.2 report; §2 architecture→Phases 5–7; §2.1 C-O-R-A loop→handler loop (6.3); §2.3 prompts→5.2; §3 data layer→Phase 1 (brand parse, usage table, spec parser w/ sentinel, seeded depreciation, exact join); §4 8 tools→Phase 2; §4.1 function-calling round-trip→6.3 handler + 9.2 report; §5 workflow incl. multi-intent + confirmation→6.3/6.4 + multi-* test cases; §6 memory (session keying, ordered viewed_listings, ordinal rule, pending_intent/action)→3.1 + 6.4; §7 error handling→tool `ToolResult` envelopes + router fallback; §8 security/governance (input/output guard, two-phase confirmation, turn budget, structured trace)→Phase 4 + 6.3/6.4; §9 evaluation (quota, thresholds, router/task/groundedness/ops, token accumulation)→Phase 8; §10 orchestration→6.4; §11 deliverables→Phase 9 (report/infographic/log); §12 structure→matches File Structure; §13 tech (OpenAI env, long-lived process)→0.1/0.2/5.1.
 
 **Placeholder scan:** No "TBD/TODO" in code steps; every code step shows complete code. `eval/testset.json` shows all 26 entries' shape (Task 8.1 lists them). Infographic PNG export is a manual step (inherently non-code).
 

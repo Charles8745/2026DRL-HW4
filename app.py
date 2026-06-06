@@ -19,11 +19,11 @@ def create_app(orchestrator):
     return app
 
 def _build_default():
-    from harness.gemini_client import GeminiClient
+    from harness.openai_client import OpenAIClient
     from data.store import DataStore
     from harness.memory import SessionStore
     from harness.orchestrator import Orchestrator
-    return create_app(Orchestrator(GeminiClient(), DataStore(seed=42), SessionStore()))
+    return create_app(Orchestrator(OpenAIClient(), DataStore(seed=42), SessionStore()))
 
 if __name__ == "__main__":
     _build_default().run(debug=True, port=5000)

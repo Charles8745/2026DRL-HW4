@@ -8,7 +8,7 @@
 
 二手重機交易平台的買家有大量重複性、跨步驟的諮詢：找符合預算的車、比較車款規格、查詢交易／看車進度、處理退款糾紛。傳統 FAQ 或關鍵字搜尋無法處理像「30 萬內想要 Yamaha 跑車，再幫我約看車」這種**多步驟、需查資料、需即時決策**的請求。
 
-本系統設計一個 **AI Harness**：以大型語言模型（LLM, 採 Google Gemini）作為**系統控制器**，透過 **function calling** 串接平台資料與工具，端到端完成上述任務，無法處理時轉接真人。重點在於 **system design 思維**——AI 如何進行 tool use 與 decision-making——而非模型訓練。目標使用者為平台買家，典型任務為四類：找車推薦、規格比較問答、交易與訂單查詢、售後與轉真人。
+本系統設計一個 **AI Harness**：以大型語言模型（LLM, 採 OpenAI `gpt-4.1-mini`）作為**系統控制器**，透過 **function calling** 串接平台資料與工具，端到端完成上述任務，無法處理時轉接真人。重點在於 **system design 思維**——AI 如何進行 tool use 與 decision-making——而非模型訓練。目標使用者為平台買家，典型任務為四類：找車推薦、規格比較問答、交易與訂單查詢、售後與轉真人。
 
 ## 2. AI Harness 系統設計
 
@@ -41,13 +41,13 @@
 
 系統採 **manual function-call 迴圈**（關閉 SDK 自動代呼），以便逐步攔截、產生 decision trace、執行單輪工具上限。一輪往返：
 
-1. **送出**：app 把該情境 tool group 的 **function declarations**（每工具 `name`/`description`/`parameters` 之 JSON schema）連同對話與 system prompt 送入 Gemini。
-2. **模型決策**：Gemini 回傳**結構化 `function_call(name, args)`**（非自然語言），代表它決定呼叫哪個工具、帶什麼參數。
+1. **送出**：app 把該情境 tool group 的 **tool/function schemas**（每工具 `name`/`description`/`parameters` 之 JSON schema）連同對話與 system prompt 送入 OpenAI。
+2. **模型決策**：OpenAI 回傳**結構化 tool call（`name`, `arguments`）**（非自然語言），代表它決定呼叫哪個工具、帶什麼參數。
 3. **執行**：app 攔截並 dispatch 到對應 Python 工具實際執行。
-4. **回填**：工具結果包成 **`function_response`(JSON)** 餵回模型。
-5. **續推理**：模型續寫——可再 emit 下一個 `function_call`（單輪多次往返），或產生最終回覆。
+4. **回填**：工具結果以**文字訊息（JSON）**餵回模型（provider-neutral，見 `handlers.py`）。
+5. **續推理**：模型續寫——可再 emit 下一個 tool call（單輪多次往返），或產生最終回覆。
 
-**終止條件**：模型不再 emit `function_call`，或達單輪工具上限 / token 預算。程式上由 `harness/handlers.py:run_handler` 實作此迴圈，`harness/llm.py` 定義 `ToolCall`/`LLMResponse` 與 `LLM` Protocol，`gemini_client.py` 解析回應的 `function_call` parts 與 `usage_metadata`。
+**終止條件**：模型不再 emit tool call，或達單輪工具上限 / token 預算。程式上由 `harness/handlers.py:run_handler` 實作此迴圈，`harness/llm.py` 定義 `ToolCall`/`LLMResponse` 與 `LLM` Protocol，`openai_client.py` 解析回應的 `message.tool_calls` 與 `usage.total_tokens`。
 
 ## 4. Tools 設計（8 個，分 4 領域）
 
@@ -102,14 +102,48 @@ T4 使用者：確認 → 實際執行 book_viewing → 建立預約
 | 路由選擇準確率 | 5 類分類；fallback/低信心僅當 gold=`閒聊範圍外` 算對 | ≥ 90% |
 | 任務成功率（end-to-end） | 呼叫了預期工具且參數正確 **且** 答案含正確事實 | ≥ 85% |
 | 回答忠實度（groundedness） | 規則比對價格/規格為主且權威；LLM-as-judge 為輔 | 違規數 = 0 |
-| 運營指標 | 平均延遲；平均工具步數；**每輪總 token＝累加該輪所有 Gemini 呼叫** | 在預算內 |
+| 運營指標 | 平均延遲；平均工具步數；**每輪總 token＝累加該輪所有 OpenAI 呼叫** | 在預算內 |
 
 groundedness 以**規則比對為主**：蒐集該輪工具回傳的所有價格，檢查回覆中的價格是否皆有依據（`groundedness_violations`），違規率納入 PASS 門檻。`run_eval` 對 confirmation 類工具以「proposed step」計分（提議即代表正確選用工具）；跨情境的多輪任務（如「推薦→約看車」第二個工具落在另一情境）以**主意圖工具**計分，其跨輪串接由 orchestrator 單元測試（兩輪確認、指代解析）驗證。
 
-> **量測結果**：本報告交付時測試以離線 `FakeLLM` 驗證系統邏輯（**68 個單元測試全綠**、零 API 成本）。對真實 Gemini 的端到端指標由 `python -m eval.run_eval` 產生；執行後將輸出表貼於此（router_accuracy / task_success / groundedness_violation_rate / avg_latency / avg_tokens / PASS）。
+### 7.1 量測結果
+
+**離線（主驗證）**：所有 LLM 存取經 `LLM` Protocol，注入 scripted `FakeLLM` → **78 個單元測試全綠**（零 API 成本、可重現），覆蓋 router／handler 工具迴圈／兩階段確認／groundedness 護欄／governance／OpenAI client 轉接層。
+
+**真實端到端**（backend = **OpenAI `gpt-4.1-mini`**，`temperature=0`；27 題一次跑完、0 error、96 次 API 呼叫；`python -m eval.run_full`，原始數據見 `eval/results.json`）：
+
+| 指標 | 數值 | 門檻 | 判定 |
+|---|---|---|---|
+| router_accuracy | **0.889**（24/27） | ≥ 0.90 | ✗ |
+| task_success | **0.593**（16/27） | ≥ 0.85 | ✗ |
+| groundedness_violation_rate | **0.222**（6/27） | = 0 | ✗ |
+| avg_latency | 5.0s／題 | — | — |
+| avg_tokens | 1350／題 | — | — |
+| **PASS** | **false** | | |
+
+各情境分解：
+
+| 情境 | n | router | task | groundedness 違規 |
+|---|---|---|---|---|
+| 找車推薦 | 5 | 1.00 | 0.80 | 0.80 |
+| 規格比較 | 5 | 1.00 | 0.60 | 0.20 |
+| 交易訂單 | 5 | 1.00 | 0.60 | 0.00 |
+| 售後轉真人 | 5 | 0.80 | 0.20 | 0.00 |
+| 跨情境多輪 | 4 | 0.75 | 0.75 | 0.25 |
+| 範圍外 | 2 | 0.50 | 0.50 | 0.00 |
+| injection | 1 | 1.00 | 1.00 | 0.00 |
+
+### 7.2 結果分析（誠實，未達門檻）
+
+- **router 88.9%**：分類強健（找車／規格／交易皆 100%），僅 3 題誤判（after-01、multi-01、oos-02），差 90% 門檻一題之距。
+- **task_success 59.3%（主要缺口）**：`gpt-4.1-mini` 在我們的 prompt 下**有時直接作答而未 emit 預期的 function call**——售後情境最明顯（0.20，常直接回覆而非呼叫 `create_ticket`/`escalate`），規格／交易為 0.60。這反映**該模型的工具呼叫傾向**，非 harness 接線缺陷（接線已由單元測試驗證全綠）。
+- **groundedness 22.2%**：集中於**找車推薦（0.80）**——推薦時模型會補述工具回傳 payload 中沒有的價格／規格數字，被規則式檢查（回覆中出現工具未回傳的價格即 flag）攔下。誠實訊號：找車情境 prompt 應更嚴格限制「只引用工具回傳價格」，或檢查器需加價格格式正規化（如「30 萬」↔`300000`）。
+- 量測誠實性：confirmation 類工具以 proposed step 計分；multi-* 以**主意圖工具**計分（跨輪串接由 orchestrator 單元測試驗證），未為衝分數改 `expected_tools`。
+
+> 結果未達 PASS 門檻是**真實量測**，非調整後的數字。改善方向（強化找車 groundedness prompt、提高售後工具呼叫率）屬後續迭代，不在本次系統設計交付範圍。
 
 ## 8. 結論
 
-本系統以 LLM 為控制器、function calling 為手段，完整實作標準 AI Harness 六大元件，並以情境隔離、兩階段確認、groundedness 護欄與結構化稽核確保**邏輯一致性與可解釋性**。所有 LLM 存取經 `LLM` Protocol 抽象，使整個 harness 可離線、可重現地單元測試（62 tests），是一個兼顧設計完整性與工程可驗證性的 AI 系統設計範例。
+本系統以 LLM 為控制器、function calling 為手段，完整實作標準 AI Harness 六大元件，並以情境隔離、兩階段確認、groundedness 護欄與結構化稽核確保**邏輯一致性與可解釋性**。所有 LLM 存取經 `LLM` Protocol 抽象，使整個 harness 可離線、可重現地單元測試（78 tests），並可無痛切換後端（本次由 Gemini 遷移至 OpenAI `gpt-4.1-mini`，管線零改動），是一個兼顧設計完整性與工程可驗證性的 AI 系統設計範例。
 
 *附：系統架構與 tool-chain 視覺化見 `report/infographic.html`／`infographic.png`；完整規格見 `docs/superpowers/specs/`；設計與開發歷程見 `log.md`。*
