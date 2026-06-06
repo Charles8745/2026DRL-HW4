@@ -23,6 +23,9 @@ def run_handler(llm, store, domain, query, budget) -> dict:
         if not budget.allow():
             return {"reply": "（已達單輪工具呼叫上限）", "trace": trace,
                     "pending_action": None, "budget_exceeded": True, "tokens": tokens}
-        result = TOOL_FUNCS[call.name](store, **call.args)
+        try:
+            result = TOOL_FUNCS[call.name](store, **call.args)
+        except Exception as e:  # malformed tool call (e.g. missing required arg) -> feed error back, don't crash
+            result = {"ok": False, "data": None, "error": f"工具執行失敗：{e}"}
         trace.append({"tool_name": call.name, "tool_args": call.args, "tool_result": result})
         messages.append({"role": "user", "content": f"工具 {call.name} 回傳：{json.dumps(result, ensure_ascii=False)}"})

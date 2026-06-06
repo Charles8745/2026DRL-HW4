@@ -104,4 +104,10 @@
 2. sem-* 端到端起初 grounded_rate=0.0 → 診斷發現被 flag 的 5 位數其實是**里程**（`_facts_from_trace` 只白名單價格）→ 在**新的** `run_sem` 用更完整的事實白名單（價格＋里程＋年份），不動凍結的主 eval 計分；grounded_rate→1.0。
 3. sem-02 觸發 `recommend` 缺 `budget` 參數使 `run_handler` 直接拋 `TypeError` → `run_sem` 比照 `run_full` 加 per-case try/except（不改凍結管線行為）。
 
-**成果**：120 個離線單元測試全綠（78→120，+42）。ablation（真實 OpenAI，16 題，report §7.4）：BM25 → +向量 → +Rerank 的 recall@1 = 0.375 → 0.375 → **0.688**、recall@5 = 0.625 → 0.688 → **0.812**、MRR = 0.549 → **0.752**、nDCG = 0.501 → **0.725**；向量把候選池天花板 recall@10 由 0.688 拉到 0.812（增召回）、rerank 在固定池內提升排序精度。sem-* 端到端（§7.5）：router 1.0 / 觸發 0.75 / grounded 1.0。**無回歸**：主 27 題 router 0.889 不變、groundedness 違規 0.222→0.185（改善），新檢索工具未劫持任何結構化找車查詢。spec `0115066`、plan `db036f4`，實作分多次 commit 於 `feat/hybrid-retrieval`。
+**對抗式 code review（4 面向 × find→verify，commit `6a25a9f` 起）確認 3 項真實問題並修正**（另 5 項經驗證後駁回為命名/不可重現）：
+4. `match_snippet`（回傳給 LLM 的型錄描述）含 5+ 位數行銷數字（如 X-ADV「76,000 輛」），模型若引用會被「只白名單價格」的 groundedness 誤判 → 在 `_snippet()` 移除 5+ 位數字串（不動 BM25/向量索引用的 `_doc_text`），使 §7.5 grounded=1.0 由「靠運氣」變穩健。
+5. `HybridRetriever.__init__` 建構時 embed 為未捕捉呼叫，OpenAI 任何閃失即讓 app/eval 建構整個崩潰 → 包 try/except，失敗則 `vstore=None`、`retrieve()` 退回純 BM25。
+6. `semantic_search` 對非數字 `budget` 直接 `int()` 會 500 → 防禦性轉型。
+7. （由 sem-02 觸發）`run_handler` 對工具執行例外未捕捉會中斷整輪 → 改以錯誤結果回饋模型續推理；對 0-error 的凍結 27 題為 no-op，屬 harness「錯誤處理」元件的真實強化。
+
+**成果**：124 個離線單元測試全綠（78→124，+46）。ablation（真實 OpenAI，16 題，report §7.4）：BM25 → +向量 → +Rerank 的 recall@1 = 0.375 → 0.375 → **0.688**、recall@5 = 0.625 → 0.688 → **0.812**、MRR = 0.549 → **0.760**、nDCG = 0.501 → **0.729**；向量把候選池天花板 recall@10 由 0.688 拉到 0.812（增召回）、rerank 在固定池內提升排序精度。sem-* 端到端（§7.5）：router 1.0 / 觸發 0.75 / grounded 1.0。**無回歸**：主 27 題 router 0.889 不變、groundedness 違規 0.222→0.185（改善），新檢索工具未劫持任何結構化找車查詢。spec `0115066`、plan `db036f4`，實作分多次 commit 於 `feat/hybrid-retrieval`。

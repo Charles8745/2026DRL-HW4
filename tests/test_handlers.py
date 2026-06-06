@@ -32,3 +32,16 @@ def test_handler_stops_at_turn_budget():
     llm = FakeLLM([LLMResponse(tool_calls=[ToolCall("recommend", {"budget": 1})], total_tokens=1)] * 10)
     out = run_handler(llm, S, "找車推薦", "x", TurnBudget(2))
     assert out["budget_exceeded"] is True
+
+def test_handler_feeds_back_tool_error_instead_of_crashing():
+    # A malformed tool call (recommend without required 'budget') must NOT crash the turn;
+    # the error is fed back as a tool result and the LLM can recover/reply.
+    S = DataStore(seed=42)
+    llm = FakeLLM([
+        LLMResponse(tool_calls=[ToolCall("recommend", {})], total_tokens=3),  # missing budget -> TypeError
+        LLMResponse(text="抱歉，請告訴我您的預算。", total_tokens=4),               # LLM recovers with a reply
+    ])
+    out = run_handler(llm, S, "找車推薦", "推薦", TurnBudget(6))
+    assert out["reply"] == "抱歉，請告訴我您的預算。"
+    assert out["trace"][0]["tool_result"]["ok"] is False
+    assert "工具執行失敗" in out["trace"][0]["tool_result"]["error"]
