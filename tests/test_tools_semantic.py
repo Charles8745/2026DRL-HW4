@@ -44,3 +44,9 @@ def test_semantic_search_empty_returns_ok_empty():
     s = _store()
     r = semantic_search(s, query="重機", budget=1)   # nothing this cheap
     assert r["ok"] is True and r["data"] == []
+
+
+def test_semantic_search_tolerates_non_numeric_budget():
+    s = _store()
+    r = semantic_search(s, query="重機", budget="便宜")   # bad LLM-supplied arg must not crash
+    assert r["ok"] is True and isinstance(r["data"], list) and r["data"]

@@ -27,6 +27,10 @@ def semantic_search(store, query, budget=None, usage=None):
     to in-sale listings. Returns a FLAT list of enriched listing dicts (same shape
     as search_listings, plus match_snippet / retrieval_rank) so groundedness and
     ordinal reference work unchanged."""
+    try:
+        cap = int(budget) if budget is not None else None    # tolerate a non-numeric LLM-supplied budget
+    except (TypeError, ValueError):
+        cap = None
     models = store.retriever.retrieve(query, k=FINAL_K)
     rows = []
     for m in models:
@@ -35,7 +39,7 @@ def semantic_search(store, query, budget=None, usage=None):
         for l in store.listings:
             if l["model"] != m["title"] or l["status"] != "在售":
                 continue
-            if budget and l["asking_price"] > int(budget):
+            if cap is not None and l["asking_price"] > cap:
                 continue
             rows.append({**_enrich(store, l),
                          "match_snippet": m["snippet"],

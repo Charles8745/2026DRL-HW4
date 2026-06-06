@@ -1,3 +1,5 @@
+import re
+
 from harness.retrieval.bm25 import BM25Index
 from harness.retrieval.vectorstore import VectorStore
 
@@ -6,13 +8,18 @@ CANDIDATE_N = 10
 FINAL_K = 5
 SNIPPET_CHARS = 200
 
+# 5+ digit runs (e.g. marketing "76,000輛" sales-volume) — stripped from the snippet so
+# the LLM can't quote a non-price big number that the price-only groundedness check would flag.
+_BIGNUM = re.compile(r"\d[\d,]{4,}")
+
 
 def _doc_text(c: dict) -> str:
     return f'{c["title"]}｜{c["brand"]}｜{c["usage"]}｜{c["description"]}'
 
 
 def _snippet(description: str) -> str:
-    return description.split("【規格】")[0].strip()[:SNIPPET_CHARS]
+    head = description.split("【規格】")[0].strip()[:SNIPPET_CHARS]
+    return _BIGNUM.sub("", head)
 
 
 def _rrf(ranked_lists: list[tuple[list[tuple[str, float]], bool]], k: int = RRF_K) -> list[str]:
@@ -41,7 +48,10 @@ class HybridRetriever:
         doc_ids = [c["title"] for c in catalog]
         texts = [_doc_text(c) for c in catalog]
         self.bm25 = BM25Index(doc_ids, texts)
-        self.vstore = VectorStore(doc_ids, embedder.embed(texts))  # build-time embed
+        try:
+            self.vstore = VectorStore(doc_ids, embedder.embed(texts))  # build-time embed
+        except Exception:
+            self.vstore = None   # dense unavailable (API down) -> retrieve() degrades to BM25-only
         self.last_trace: dict = {"dense_skipped": False, "rerank_skipped": False}
 
     def retrieve(self, query: str, k: int = FINAL_K,
@@ -49,11 +59,14 @@ class HybridRetriever:
         trace = {"dense_skipped": False, "rerank_skipped": False}
         lists = [(self.bm25.search(query), True)]
         if use_dense:
-            try:
-                qvec = self.embedder.embed([query])[0]
-                lists.append((self.vstore.query(qvec, top_n=len(self.catalog)), False))
-            except Exception:
+            if self.vstore is None:
                 trace["dense_skipped"] = True
+            else:
+                try:
+                    qvec = self.embedder.embed([query])[0]
+                    lists.append((self.vstore.query(qvec, top_n=len(self.catalog)), False))
+                except Exception:
+                    trace["dense_skipped"] = True
         candidates = _rrf(lists)[:CANDIDATE_N]
         if use_rerank and len(candidates) > 1:
             cand_objs = [{"doc_id": t, "title": t,

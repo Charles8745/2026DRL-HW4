@@ -28,6 +28,27 @@ def test_snippet_strips_spec_block_and_truncates():
     assert len(s) <= 200
 
 
+def test_snippet_strips_marketing_big_numbers():
+    # 5+ digit marketing stats (e.g. "76,000輛" sales volume) must not survive in the snippet,
+    # else the LLM could quote a non-price number that the price-only groundedness check flags.
+    s = _snippet("歐洲銷售量創造出76,000輛佳績，適合新手通勤")
+    assert "76,000" not in s and "76000" not in s
+    assert "適合新手通勤" in s        # qualitative text preserved
+    assert "350" in _snippet("350cc 雙缸 適合新手")   # <=4-digit specs kept
+
+
+def test_build_time_embed_failure_degrades_to_bm25_only():
+    class AlwaysBoom:
+        def embed(self, texts):
+            raise RuntimeError("embeddings api down")
+
+    r = HybridRetriever(CATALOG, AlwaysBoom(), FakeReranker())   # construction must NOT crash
+    assert r.vstore is None
+    out = r.retrieve("仿賽賽道", k=2)
+    assert r.last_trace["dense_skipped"] is True
+    assert out and out[0]["title"] == "Race"   # BM25-only still works
+
+
 def test_retrieve_returns_models_with_rank():
     out = _retriever().retrieve("通勤省油好停的速克達", k=2)
     assert out[0]["title"] == "Scoot"
