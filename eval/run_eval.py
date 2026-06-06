@@ -30,6 +30,17 @@ def score_case(case: dict, out: dict) -> dict:
     return {"id": case["id"], "router_ok": router_ok, "tools_ok": tools_ok,
             "grounded_ok": grounded_ok, "tokens": out.get("trace", {}).get("tokens", 0)}
 
+def score_multiturn(case: dict, out1: dict, out2: dict) -> dict:
+    """Two-turn chain scoring for a multi-* case: primary tool fired in turn-1 AND the
+    recorded secondary_tool fired in the follow-up turn-2 (proposed/confirmation-gated counts)."""
+    primary_ok = score_case(case, out1)["tools_ok"]
+    sec = case["ground_truth"].get("secondary_tool")
+    used2 = {s["tool_name"] for s in (out2.get("trace", {}).get("steps", []) or [])}
+    secondary_ok = bool(sec) and sec in used2
+    return {"id": case["id"], "primary_ok": primary_ok,
+            "secondary_ok": secondary_ok, "chain_ok": primary_ok and secondary_ok}
+
+
 def select_cases(cases: list[dict], offset: int = 0, limit: int | None = None) -> list[dict]:
     """Pick a batch of cases (for running the testset in chunks under a rate-limited key)."""
     sliced = cases[offset:]

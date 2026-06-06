@@ -91,6 +91,32 @@ def test_preference_slots_autofill_from_tool_args():
     slots = o.memory.get(sid)["slots"]
     assert slots["budget"] == 250000 and slots["brand_pref"] == "Honda" and slots["usage"] == "naked"
 
+def test_two_turn_chain_recommend_then_book_first_via_ordinal():
+    # multi-* chain end-to-end across two turns in one session: turn-1 recommend populates
+    # viewed_listings; turn-2 "約看第一台" resolves the ordinal to that listing and books it.
+    o = _orch([
+        # turn 1
+        LLMResponse(text="推薦naked", total_tokens=1),                              # rewriter
+        LLMResponse(text="找車推薦", total_tokens=1),                               # router
+        LLMResponse(tool_calls=[ToolCall("recommend", {"budget": 300000, "usage": "naked"})], total_tokens=1),
+        LLMResponse(text="為您推薦", total_tokens=1),                               # handler reply
+        # turn 2
+        LLMResponse(text="約看第一台", total_tokens=1),                             # rewriter
+        LLMResponse(text="交易訂單", total_tokens=1),                              # router
+        LLMResponse(tool_calls=[ToolCall("book_viewing",
+            {"listing_id": "X", "datetime": "2026-06-20", "contact": "0900"})], total_tokens=1),
+    ])
+    sid = o.memory.new_session()
+    o.process(sid, "推薦naked車然後幫我約看第一台")
+    viewed = o.memory.get(sid)["slots"]["viewed_listings"]
+    assert viewed, "turn-1 recommend should populate viewed_listings"
+
+    out2 = o.process(sid, "約看第一台")
+    assert out2["trace"]["resolved_listing_id"] == viewed[0]["listing_id"]   # ordinal resolved
+    assert "book_viewing" in [s["tool_name"] for s in out2["trace"]["steps"]]
+    assert out2["awaiting_confirmation"] is True                              # confirmation-gated
+
+
 def test_secondary_booking_intent_deferred_not_dropped():
     o = _orch([
         LLMResponse(text="推薦naked", total_tokens=1),

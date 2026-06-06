@@ -104,21 +104,21 @@ T4 使用者：確認 → 實際執行 book_viewing → 建立預約
 | 回答忠實度（groundedness） | 規則比對價格/規格為主且權威；LLM-as-judge 為輔 | 違規數 = 0 |
 | 運營指標 | 平均延遲；平均工具步數；**每輪總 token＝累加該輪所有 OpenAI 呼叫** | 在預算內 |
 
-groundedness 以**規則比對為主**：蒐集該輪工具回傳的所有價格，檢查回覆中的價格是否皆有依據（`groundedness_violations`），違規率納入 PASS 門檻。`run_eval` 對 confirmation 類工具以「proposed step」計分（提議即代表正確選用工具）；跨情境的多輪任務（如「推薦→約看車」第二個工具落在另一情境）以**主意圖工具**計分，其跨輪串接由 orchestrator 單元測試（兩輪確認、指代解析）驗證。
+groundedness 以**規則比對為主**：蒐集該輪工具回傳的所有價格，檢查回覆中的價格是否皆有依據（`groundedness_violations`），違規率納入 PASS 門檻。`run_eval` 對 confirmation 類工具以「proposed step」計分（提議即代表正確選用工具）；跨情境的多輪任務（如「推薦→約看車」第二個工具落在另一情境）單輪以**主意圖工具**計分，其跨輪串接另以 §7.3 **真兩輪量測**（`score_multiturn`，量第二輪次工具）與 orchestrator 單元測試（兩輪確認、指代解析）共同驗證。
 
 ### 7.1 量測結果
 
 **離線（主驗證）**：所有 LLM 存取經 `LLM` Protocol，注入 scripted `FakeLLM` → **78 個單元測試全綠**（零 API 成本、可重現），覆蓋 router／handler 工具迴圈／兩階段確認／groundedness 護欄／governance／OpenAI client 轉接層。
 
-**真實端到端**（backend = **OpenAI `gpt-4.1-mini`**，`temperature=0`；27 題一次跑完、0 error、96 次 API 呼叫；`python -m eval.run_full`，原始數據見 `eval/results.json`）：
+**真實端到端**（backend = **OpenAI `gpt-4.1-mini`**，`temperature=0`；27 題一次跑完、0 error、108 次 API 呼叫含 4 題第二輪；`python -m eval.run_full`，原始數據見 `eval/results.json`）：
 
 | 指標 | 數值 | 門檻 | 判定 |
 |---|---|---|---|
 | router_accuracy | **0.889**（24/27） | ≥ 0.90 | ✗ |
-| task_success | **0.593**（16/27） | ≥ 0.85 | ✗ |
+| task_success | **0.630**（17/27） | ≥ 0.85 | ✗ |
 | groundedness_violation_rate | **0.222**（6/27） | = 0 | ✗ |
-| avg_latency | 5.0s／題 | — | — |
-| avg_tokens | 1350／題 | — | — |
+| avg_latency | 4.2s／題 | — | — |
+| avg_tokens | 1198／題（turn-1） | — | — |
 | **PASS** | **false** | | |
 
 各情境分解：
@@ -128,19 +128,42 @@ groundedness 以**規則比對為主**：蒐集該輪工具回傳的所有價格
 | 找車推薦 | 5 | 1.00 | 0.80 | 0.80 |
 | 規格比較 | 5 | 1.00 | 0.60 | 0.20 |
 | 交易訂單 | 5 | 1.00 | 0.60 | 0.00 |
-| 售後轉真人 | 5 | 0.80 | 0.20 | 0.00 |
+| 售後轉真人 | 5 | 0.60 | 0.20 | 0.00 |
 | 跨情境多輪 | 4 | 0.75 | 0.75 | 0.25 |
-| 範圍外 | 2 | 0.50 | 0.50 | 0.00 |
+| 範圍外 | 2 | 1.00 | 1.00 | 0.00 |
 | injection | 1 | 1.00 | 1.00 | 0.00 |
+
+> 數值取自單次完整執行；`gpt-4.1-mini` 即使 `temperature=0`，工具迴圈較長的題目仍有輕微非決定性，重跑時個別 case 可能微幅變動（如售後、範圍外的個別題）。
 
 ### 7.2 結果分析（誠實，未達門檻）
 
-- **router 88.9%**：分類強健（找車／規格／交易皆 100%），僅 3 題誤判（after-01、multi-01、oos-02），差 90% 門檻一題之距。
-- **task_success 59.3%（主要缺口）**：`gpt-4.1-mini` 在我們的 prompt 下**有時直接作答而未 emit 預期的 function call**——售後情境最明顯（0.20，常直接回覆而非呼叫 `create_ticket`/`escalate`），規格／交易為 0.60。這反映**該模型的工具呼叫傾向**，非 harness 接線缺陷（接線已由單元測試驗證全綠）。
+- **router 88.9%**：分類強健（找車／規格／交易／範圍外皆 1.00），本次 3 題誤判（after-01、after-05、multi-01），差 90% 門檻一題之距；售後情境路由較不穩（0.60）。
+- **task_success 63.0%（主要缺口）**：`gpt-4.1-mini` 在我們的 prompt 下**有時直接作答而未 emit 預期的 function call**——售後情境最明顯（0.20，常直接回覆而非呼叫 `create_ticket`/`escalate`），規格／交易為 0.60。這反映**該模型的工具呼叫傾向**，非 harness 接線缺陷（接線已由單元測試驗證全綠）。
 - **groundedness 22.2%**：集中於**找車推薦（0.80）**——推薦時模型會補述工具回傳 payload 中沒有的價格／規格數字，被規則式檢查（回覆中出現工具未回傳的價格即 flag）攔下。誠實訊號：找車情境 prompt 應更嚴格限制「只引用工具回傳價格」，或檢查器需加價格格式正規化（如「30 萬」↔`300000`）。
-- 量測誠實性：confirmation 類工具以 proposed step 計分；multi-* 以**主意圖工具**計分（跨輪串接由 orchestrator 單元測試驗證），未為衝分數改 `expected_tools`。
+- 量測誠實性：confirmation 類工具以 proposed step 計分；單輪 27 題以**主意圖工具**計分，未為衝分數改 `expected_tools`；跨輪次工具另以 §7.3 真兩輪量測。
 
 > 結果未達 PASS 門檻是**真實量測**，非調整後的數字。改善方向（強化找車 groundedness prompt、提高售後工具呼叫率）屬後續迭代，不在本次系統設計交付範圍。
+
+### 7.3 多輪鏈成功率（真兩輪量測）
+
+`secondary_tool` 過去只記錄、不量測。本次對 4 個 multi-* case 在**同一 session** 跑第二輪（testset 的 `followup`），以 `score_multiturn` 量測「主工具(turn-1)＋次工具(turn-2) 是否都觸發」。**不改單輪計分、不改 `expected_tools`**，純加法。
+
+**`multiturn_chain_success` = 0.25（1/4）**
+
+| case | turn-2（followup） | 主工具(turn-1) | 次工具(turn-2) | 鏈 |
+|---|---|---|---|---|
+| multi-01 | 第一台規格如何 | ✗ recommend | ✗ get_listing_detail | ✗ |
+| multi-02 | 約看第一台 | ✅ recommend | ✅ book_viewing | ✅ |
+| multi-03 | 便宜的那台幫我約看車 | ✅ compare_models | ✗ book_viewing | ✗ |
+| multi-04 | 幫我開工單 | ✅ check_order | ✗ create_ticket | ✗ |
+
+分析（誠實）：
+- **multi-02 ✅**：完整示範跨情境鏈——turn-1 `recommend` 設定 viewed_listings，turn-2「約看第一台」經 **ordinal 解析**取得 listing 後 `book_viewing`（confirmation-gated，以 proposed 計）。這正是系統的招牌能力。
+- **multi-01 ✗**：turn-1 連 `recommend` 都未觸發（模型直接作答），鏈在主工具即斷——與 §7.2 的工具呼叫傾向問題同源。
+- **multi-03 ✗（已知架構限制）**：`compare_models` 回的是**車款**非**刊登**，`set_viewed` 不記比較結果，「便宜的那台」既無價可比、也無 listing 可約。「車款比較→刊登預約」橋接為 **future work**。
+- **multi-04 ✗**：turn-2「幫我開工單」未觸發 `create_ticket`（模型多追問細節而非直接建單）——同屬工具呼叫率問題。
+
+> 設計意義：此指標把「招牌的跨輪能力」從**只由單元測試驗證接線**，提升為**對真實模型的端到端量測**，誠實暴露 1/4 的真實鏈成功率與其斷點，而非以單輪主工具粉飾。
 
 ## 8. 結論
 

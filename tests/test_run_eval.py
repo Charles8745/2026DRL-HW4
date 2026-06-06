@@ -1,4 +1,4 @@
-from eval.run_eval import score_case, select_cases, run
+from eval.run_eval import score_case, select_cases, run, score_multiturn
 
 def test_router_accuracy_metric():
     case = {"id":"x","input":"i","expected_domain":"找車推薦","expected_tools":["recommend"],"ground_truth":{}}
@@ -35,6 +35,27 @@ def test_select_cases_offset_and_limit():
     assert [c["id"] for c in select_cases(cases, offset=3, limit=4)] == [3, 4, 5, 6]
     assert len(select_cases(cases)) == 10
     assert select_cases(cases, offset=8, limit=5) == [{"id": 8}, {"id": 9}]
+
+def test_score_multiturn_chain_ok_when_both_tools_fire():
+    case = {"id": "multi-x", "input": "i", "expected_domain": "找車推薦",
+            "expected_tools": ["recommend"], "ground_truth": {"secondary_tool": "book_viewing"}}
+    out1 = {"blocked": False, "trace": {"router_label": "找車推薦",
+            "steps": [{"tool_name": "recommend"}]}}
+    out2 = {"blocked": False, "trace": {"router_label": "交易訂單",
+            "steps": [{"tool_name": "book_viewing", "proposed": True}]}}
+    s = score_multiturn(case, out1, out2)
+    assert s["primary_ok"] is True and s["secondary_ok"] is True and s["chain_ok"] is True
+
+
+def test_score_multiturn_chain_fails_when_secondary_missing():
+    case = {"id": "multi-y", "input": "i", "expected_domain": "規格比較",
+            "expected_tools": ["compare_models"], "ground_truth": {"secondary_tool": "book_viewing"}}
+    out1 = {"blocked": False, "trace": {"router_label": "規格比較",
+            "steps": [{"tool_name": "compare_models"}]}}
+    out2 = {"blocked": False, "trace": {"router_label": "規格比較", "steps": []}}  # never booked
+    s = score_multiturn(case, out1, out2)
+    assert s["primary_ok"] is True and s["secondary_ok"] is False and s["chain_ok"] is False
+
 
 def test_run_survives_a_failing_case():
     # a transient error on one case (e.g. 429) is recorded, not fatal; the batch completes
