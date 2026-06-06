@@ -15,5 +15,10 @@ _HANDLER_BASE = (
     "所有車款、規格、價格、車況、訂單狀態都必須來自工具回傳，不可捏造（groundedness）。"
     "查無資料就如實告知。完成後以繁體中文清楚回覆使用者。"
 )
+_DOMAIN_HINTS = {
+    "找車推薦": "（工具選擇：查詢點名車種(速克達/sport/naked/touring/adventure/cruiser)、品牌，"
+              "或含任何價格、年份條件(含『便宜』『20萬』等)時，用 search_listings 或 recommend；"
+              "僅在完全沒有上述結構化條件、純生活情境或模糊偏好時，才用 semantic_search。）",
+}
 def handler_sys(domain: str) -> str:
-    return _HANDLER_BASE.format(domain=domain)
+    return _HANDLER_BASE.format(domain=domain) + _DOMAIN_HINTS.get(domain, "")

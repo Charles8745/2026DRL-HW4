@@ -117,6 +117,28 @@ def test_two_turn_chain_recommend_then_book_first_via_ordinal():
     assert out2["awaiting_confirmation"] is True                              # confirmation-gated
 
 
+def test_semantic_search_sets_viewed_for_ordinal_reference():
+    # A semantic query fires semantic_search; its flat listing list must populate
+    # viewed_listings so "第一台" ordinal reference works on retrieved results.
+    from harness.embedder import FakeEmbedder
+    from harness.reranker import FakeReranker
+    from harness.retrieval.retriever import HybridRetriever
+    store = DataStore(seed=42)
+    store.retriever = HybridRetriever(store.catalog, FakeEmbedder(64), FakeReranker())
+    o = Orchestrator(FakeLLM([
+        LLMResponse(text="想找通勤省油好停的速克達", total_tokens=1),                  # rewriter
+        LLMResponse(text="找車推薦", total_tokens=1),                                 # router
+        LLMResponse(tool_calls=[ToolCall("semantic_search", {"query": "通勤省油速克達"})], total_tokens=1),
+        LLMResponse(text="幫你找到幾台適合通勤的車。", total_tokens=1),                 # handler reply
+    ]), store, SessionStore())
+    sid = o.memory.new_session()
+    out = o.process(sid, "想找通勤省油好停的車")
+    steps = out["trace"]["steps"]
+    assert "semantic_search" in [s["tool_name"] for s in steps]
+    viewed = o.memory.get(sid)["slots"]["viewed_listings"]
+    assert viewed and "listing_id" in viewed[0]   # set_viewed fired on the flat list
+
+
 def test_secondary_booking_intent_deferred_not_dropped():
     o = _orch([
         LLMResponse(text="推薦naked", total_tokens=1),

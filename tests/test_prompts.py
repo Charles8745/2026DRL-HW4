@@ -7,3 +7,7 @@ def test_router_lists_all_five_labels():
 def test_handler_sys_mentions_groundedness_rule():
     s = handler_sys("找車推薦")
     assert "工具" in s and ("不可捏造" in s or "groundedness" in s.lower())
+
+def test_handler_sys_findcar_has_tool_selection_hint():
+    assert "semantic_search" in handler_sys("找車推薦")
+    assert "semantic_search" not in handler_sys("交易訂單")

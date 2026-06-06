@@ -68,7 +68,7 @@ class Orchestrator:
         # remember viewed listings (ordinal resolution); auto-fill preference slots from tool args
         for step in out["trace"]:
             data = step["tool_result"].get("data")
-            if step["tool_name"] in ("search_listings", "recommend") and isinstance(data, list):
+            if step["tool_name"] in ("search_listings", "recommend", "semantic_search") and isinstance(data, list):
                 self.memory.set_viewed(sid, data)
             args = step.get("tool_args", {})
             self.memory.update_slots(sid, budget=args.get("budget") or args.get("max_price"),

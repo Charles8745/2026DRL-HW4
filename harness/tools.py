@@ -1,4 +1,5 @@
 from data.store import DataStore
+from harness.retrieval.retriever import FINAL_K
 
 def _ok(data):  return {"ok": True, "data": data, "error": None}
 def _err(msg):  return {"ok": False, "data": None, "error": msg}
@@ -19,6 +20,26 @@ def search_listings(store, brand_pref=None, max_price=None, year_from=None, usag
 def recommend(store, budget, usage=None, brand_pref=None):
     r = search_listings(store, brand_pref=brand_pref, max_price=budget, usage=usage)
     rows = sorted(r["data"], key=lambda x: x["asking_price"])
+    return _ok(rows)
+
+def semantic_search(store, query, budget=None, usage=None):
+    """Hybrid retrieval (BM25 + dense RAG + rerank) over catalog models, expanded
+    to in-sale listings. Returns a FLAT list of enriched listing dicts (same shape
+    as search_listings, plus match_snippet / retrieval_rank) so groundedness and
+    ordinal reference work unchanged."""
+    models = store.retriever.retrieve(query, k=FINAL_K)
+    rows = []
+    for m in models:
+        if usage and m["usage"] != usage:
+            continue
+        for l in store.listings:
+            if l["model"] != m["title"] or l["status"] != "在售":
+                continue
+            if budget and l["asking_price"] > int(budget):
+                continue
+            rows.append({**_enrich(store, l),
+                         "match_snippet": m["snippet"],
+                         "retrieval_rank": m["retrieval_rank"]})
     return _ok(rows)
 
 _SENTINEL = "資料未提供"
@@ -71,12 +92,13 @@ def escalate_to_human(store, reason):
 
 TOOL_FUNCS = {
     "search_listings": search_listings, "recommend": recommend,
+    "semantic_search": semantic_search,
     "get_listing_detail": get_listing_detail, "compare_models": compare_models,
     "check_order": check_order, "book_viewing": book_viewing,
     "create_ticket": create_ticket, "escalate_to_human": escalate_to_human,
 }
 TOOL_GROUPS = {
-    "找車推薦": ["search_listings", "recommend"],
+    "找車推薦": ["search_listings", "recommend", "semantic_search"],
     "規格比較": ["get_listing_detail", "compare_models"],
     "交易訂單": ["check_order", "book_viewing"],
     "售後轉真人": ["create_ticket", "escalate_to_human"],
@@ -96,6 +118,10 @@ TOOL_SCHEMAS = {
     "recommend": {"name": "recommend", "description": "依預算/車種推薦並由低到高排序",
         "parameters": _p({"budget": {"type": "integer"}, "usage": {"type": "string"},
                           "brand_pref": {"type": "string"}}, ["budget"])},
+    "semantic_search": {"name": "semantic_search",
+        "description": "以自然語言語意檢索車款（用途/情境/模糊偏好，如『新手通勤省油好停』），回傳相關在售刈登。查詢若已含明確品牌/車種/價格條件，請改用 search_listings 或 recommend。",
+        "parameters": _p({"query": {"type": "string"}, "budget": {"type": "integer"},
+                          "usage": {"type": "string"}}, ["query"])},
     "get_listing_detail": {"name": "get_listing_detail", "description": "取得單一刊登完整規格與車況",
         "parameters": _p({"listing_id": {"type": "string"}}, ["listing_id"])},
     "compare_models": {"name": "compare_models", "description": "並排比較兩車款規格與價格",
