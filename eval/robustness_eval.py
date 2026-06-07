@@ -27,6 +27,8 @@ def _used_tools(out: dict) -> set:
 def _is_honest_empty(out: dict, user_input: str) -> bool:
     steps = out.get("trace", {}).get("steps", []) or []
     def _nonempty(s):
+        # Falsy/None data (e.g. _ok([]) "found nothing", or _err -> data=None) is
+        # intentionally treated as "no results", which is the honest-empty trigger.
         tr = s.get("tool_result") or {}
         return bool(tr.get("data")) and tr.get("ok") is not False
     if any(_nonempty(s) for s in steps):
@@ -40,7 +42,11 @@ def _is_honest_empty(out: dict, user_input: str) -> bool:
 
 def evaluate_expect(expect: dict, out: dict, ctx: dict) -> dict:
     """Evaluate only the checks present in `expect`. ctx keys: user_input, turn_delta, errored.
-    Returns {check_key: bool}. Raises ValueError on an unknown check key."""
+    Returns {check_key: bool}. Raises ValueError on an unknown check key.
+
+    router_label takes a str value and tools takes a list; every other (boolean) check
+    tests the positive condition and ignores the declared value — always pass True for
+    those (the dataset guard test enforces this)."""
     used = _used_tools(out)
     results = {}
     for key, value in expect.items():
