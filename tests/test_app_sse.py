@@ -90,3 +90,42 @@ def test_streamrunner_partial_consume_then_close_is_clean():
     next(gen)            # partial consume (first frame only)
     gen.close()          # simulate client disconnect; must not raise RuntimeError
     assert runner._orch is None  # ref dropped on GeneratorExit unwind
+
+
+from be.harness.llm import FakeLLM, LLMResponse
+from de.data.store import DataStore
+from be.harness.memory import SessionStore
+from be.harness.orchestrator import Orchestrator
+
+
+def test_overshort_fakellm_ends_with_error_and_done_within_budget():
+    # FakeLLM with only ONE response: rewrite consumes it, route() then IndexErrors.
+    # The worker must catch it, emit error, then done -> the generator must NOT hang.
+    llm = FakeLLM([LLMResponse(text="嗨", total_tokens=1)])
+    orch = Orchestrator(llm, DataStore(seed=42), SessionStore())
+    runner = StreamRunner(heartbeat_s=0.2, wall_clock_s=5.0)
+    sid = orch.memory.new_session()
+    gen = runner.run(orch, sid, "嗨", request_key=None)
+    t0 = time.monotonic()
+    raw = "".join(gen)          # full drain
+    elapsed = time.monotonic() - t0
+    frames = parse_sse(raw)
+    types = event_types(frames)
+    assert "error" in types and types[-1] == "done"
+    assert elapsed < 5.0        # finished well within the drain/wall-clock budget
+
+
+def test_wall_clock_cap_aborts_a_stuck_worker():
+    class _StuckOrch:
+        def process(self, sid, user_input, on_step=None):
+            on_step("guard", {"blocked": False, "reason": None})
+            time.sleep(10)      # simulate a hung OpenAI call
+    runner = StreamRunner(heartbeat_s=0.1, wall_clock_s=0.5)
+    gen = runner.run(_StuckOrch(), "sidWC", "嗨", request_key=None)
+    t0 = time.monotonic()
+    raw = "".join(gen)
+    elapsed = time.monotonic() - t0
+    frames = parse_sse(raw)
+    types = event_types(frames)
+    assert "error" in types and types[-1] == "done"
+    assert elapsed < 3.0        # wall-clock fired ~0.5s, did not wait for the 10s sleep
