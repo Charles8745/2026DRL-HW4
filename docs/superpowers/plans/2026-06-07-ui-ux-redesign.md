@@ -8585,11 +8585,11 @@ cd /Users/charles88/Desktop/2026DRL/HW4 && ls fe/static/js/__tests__/*.test.mjs
 ```
 Expected output: the resolver and reducer suites created in M0/M4, e.g. `fe/static/js/__tests__/imageResolver.test.mjs` and `fe/static/js/__tests__/pipelineReducer.test.mjs`. If the directory is empty, STOP — M4's JS tests were not committed.
 
-- [ ] **Step 3: Run the entire JS test directory in one shot (Node v22 supports a directory/glob spec; this catches every `*.test.mjs`).**
+- [ ] **Step 3: Run the entire JS suite in one shot via an explicit glob (catches every `*.test.mjs`).**
 ```bash
-cd /Users/charles88/Desktop/2026DRL/HW4 && node --test fe/static/js/__tests__/
+cd /Users/charles88/Desktop/2026DRL/HW4 && node --test 'fe/static/js/__tests__/*.test.mjs'
 ```
-Expected output: a TAP summary ending with `# pass <K>`, `# fail 0`, `# cancelled 0`, where `K` is the total assertion-blocks across the resolver suite (all 33 real catalog rows; slug rule; chain order local→remote→placeholder; `http://`→`https` upgrade; chain-tail stays placeholder; overshoot doesn't loop `onerror`) and the reducer suite (`reduceEvent` active→done→error; retrieval nesting via `parentId`; unknown kind→generic node). `# fail` MUST be `0`.
+Expected output: a TAP summary ending with `# pass <K>`, `# fail 0`, `# cancelled 0`, where `K` is the total assertion-blocks across the resolver suite (all 33 real catalog rows; slug rule; chain order local→remote→placeholder; `http://`→`https` upgrade; chain-tail stays placeholder; overshoot doesn't loop `onerror`) and the reducer suite (`reduceEvent` active→done→error; retrieval nesting via `parentId`; unknown kind→generic node), plus the key-format / labels / landing / sse-parse suites. On the pinned Node v22.19.0 `# pass` is `43` and `# fail` MUST be `0`. (Do NOT pass a bare directory — `node --test fe/static/js/__tests__/` resolves the directory as a CJS module entry and throws `MODULE_NOT_FOUND`, printing `# fail 1`; on Node v22 only an explicit glob, an explicit file list, or a bare `node --test` run from the repo root auto-discovers `**/*.test.*`.)
 
 - [ ] **Step 4: Re-run each suite individually so a per-file PASS is explicit (defensive against a directory-spec swallowing a file).**
 ```bash
