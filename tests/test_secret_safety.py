@@ -123,3 +123,44 @@ def test_canary_absent_from_caplog(monkeypatch, caplog):
         logger.info("debug dump key=%s ok", CANARY)
     assert "sk-LEAKCANARY" not in caplog.text
     assert "sk-***REDACTED***" in caplog.text
+
+
+# --- G. exc_info traceback is redacted by the filter (defense-in-depth) ----------
+def test_canary_absent_from_caplog_traceback(monkeypatch, caplog):
+    create_app(None, memory=SessionStore(), corpus_cache=object())
+    logger = logging.getLogger("rb.secret.tb")
+    with caplog.at_level(logging.ERROR):
+        try:
+            raise RuntimeError(f"openai 401 Bearer {CANARY}")
+        except RuntimeError:
+            logger.error("boom", exc_info=True)   # would normally write the raw traceback
+    assert "sk-LEAKCANARY" not in caplog.text
+
+
+# --- H. non-stream /api/chat: unhandled orch exception with a key in its text -----
+# must NOT leak the canary into logs (H1) and must return a generic 500, no canary.
+def test_chat_byok_exception_no_canary_in_logs_or_body(monkeypatch, caplog):
+    import fe.app as appmod
+
+    def _raising_build(key, *, model, embed_model, memory, corpus_cache):
+        class _Boom:
+            def process(self, sid, msg, on_step=None):
+                raise RuntimeError(
+                    "openai 401 Bearer sk-LEAKCANARYxxxxxxxxxxxxxxxxxxxx")
+        return _Boom()
+
+    monkeypatch.setattr(_cfg, "DEMO_MODE", False, raising=False)
+    monkeypatch.setattr(_cfg, "ALLOW_ENV_KEY", False, raising=False)
+    monkeypatch.setattr(appmod, "build_request_orchestrator", _raising_build)
+    app = create_app(None, memory=SessionStore(), corpus_cache=object())
+
+    with caplog.at_level(logging.DEBUG):
+        r = app.test_client().post("/api/chat", json={"message": "嗨"},
+                                   headers={"X-RideButler-Key": CANARY})
+    # generic 500, no canary in the body
+    assert r.status_code == 500
+    raw = r.get_data(as_text=True)
+    assert "sk-LEAKCANARY" not in raw
+    assert r.get_json() == {"error": "server_error"}
+    # canary must be ABSENT from every captured log line (message + any traceback)
+    assert "sk-LEAKCANARY" not in caplog.text

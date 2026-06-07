@@ -54,7 +54,10 @@ _SESSION_GUARD = _SessionGuard()
 
 class _RedactFilter(logging.Filter):
     """Process-level filter: run generic redact_key over every LogRecord's rendered
-    message so an accidental key in any log line becomes sk-***REDACTED*** (R6)."""
+    message AND any attached traceback so an accidental key in any log line (message
+    OR exc_info/exc_text) becomes sk-***REDACTED*** (R6). Scrubbing exc_info is
+    defense-in-depth: Flask's logger writes tracebacks via exc_info, which bypasses
+    a message-only scrub, so we render + redact + collapse it here for every record."""
     def filter(self, record: logging.LogRecord) -> bool:
         try:
             msg = record.getMessage()
@@ -62,6 +65,17 @@ class _RedactFilter(logging.Filter):
             if red != msg:
                 record.msg = red
                 record.args = ()
+        except Exception:
+            pass
+        try:
+            # Render any live exc_info, redact it, freeze it into exc_text, and drop
+            # exc_info so the handler's Formatter can't re-render the raw traceback.
+            if record.exc_info:
+                text = logging.Formatter().formatException(record.exc_info)
+                record.exc_text = redact_key(text, None)
+                record.exc_info = None
+            elif record.exc_text:
+                record.exc_text = redact_key(record.exc_text, None)
         except Exception:
             pass
         return True
@@ -145,8 +159,14 @@ def create_app(orchestrator=None, *, memory=None, corpus_cache=None):
         orch = build_request_orchestrator(
             key, model=config.MODEL, embed_model=config.EMBED_MODEL,
             memory=memory_, corpus_cache=app.config["CORPUS_CACHE"])
-        with _SESSION_GUARD.lock_for(sid):
-            out = orch.process(sid, body["message"])
+        try:
+            with _SESSION_GUARD.lock_for(sid):
+                out = orch.process(sid, body["message"])
+        except Exception as e:
+            # NEVER attach exc_info here: a key embedded in the exception text would
+            # be written verbatim via the traceback. Log only the redacted message.
+            app.logger.error("chat failed: %s", redact_key(str(e), key))
+            return _no_store(jsonify({"error": "server_error"})), 500
         resp = _no_store(jsonify({"session_id": sid, **out}))
         resp.headers["X-RideButler-Owner"] = owner
         return resp
