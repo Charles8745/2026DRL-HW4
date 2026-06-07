@@ -52,7 +52,7 @@ python -m fe.app                 # 啟動 Flask，開 http://localhost:5000（�
 ## 測試
 
 ```bash
-python -m pytest -q                               # 240 個 Python 單元測試，全程 Fake*（LLM/Embedder/Reranker），不需 API key、不花費用
+python -m pytest -q                               # 242 個 Python 單元測試，全程 Fake*（LLM/Embedder/Reranker），不需 API key、不花費用
 node --test 'fe/static/js/__tests__/*.test.mjs'   # 純邏輯 JS 模組（圖片 fallback 解析、pipeline reducer），Node v22 內建 runner、零依賴
 ```
 

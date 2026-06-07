@@ -158,7 +158,7 @@
 7. **單實例 SSE-safe 部署**：gunicorn `gthread`、workers 硬鉗為 1（boot self-check 拒 >1）、`X-Accel-Buffering: no`；公開主機**絕不**設 `OPENAI_API_KEY`（生產＝BYOK only，R1）。理由：sync worker 會把 SSE 緩衝成一次性突發（R10）、多 worker 會分裂索引/session（R11）。
 
 **回歸保證（M7 全測試 + 凍結基準回歸）**：
-- `.venv/bin/python -m pytest -q` → **240 passed**（147 既有 + 新增 SSE/BYOK/安全/部署/JS-mirror 測試），0 failed、0 真實網路（全 `Fake*`/spy）。
+- `.venv/bin/python -m pytest -q` → **242 passed**（147 既有 + 新增 SSE/BYOK/安全/部署/JS-mirror 測試），0 failed、0 真實網路（全 `Fake*`/spy）。
 - 凍結基準一字未動：27 題主 eval、40 題 robustness、`be/eval/*results*.json` 的守門（`test_testset`/`test_robustness_testset`/`test_run_eval`/`test_robustness_eval`）全綠；`git diff main` 對這些檔為空。
 - 最關鍵守門 `test_on_step_none_is_identical` 單獨重跑 PASS：六路徑回傳含 `trace.tokens` deep-equal。
 - `node --test 'fe/static/js/__tests__/*.test.mjs'` → 43 pass / 0 fail（注意：Node v22 上 bare-dir 形式 `node --test fe/static/js/__tests__/` 會 MODULE_NOT_FOUND，須用 glob）（圖片解析 33 真 catalog row + slug 規則 + 鏈序 + http→https + 鏈尾恆 placeholder；pipeline reducer active→done→error + retrieval 巢狀 + unknown→generic）。
@@ -184,4 +184,4 @@
 
 修復後端到端實測通過：landing（置中襯線 wordmark＋賽車綠搜尋膠囊＋4 chips＋demo banner）→ 真實查詢「30萬內 Yamaha 跑車」→ SSE 管線逐步點亮（意圖 chip「找車推薦」、真實 `tokens 1686 · 5974ms`）→ 兩張車卡載入**真實原廠照**（三層 fallback 命中 media_url）＋金色價格＋車況 badge → 多輪（點「查看規格」→ `listing_id` prefill 第 2 輪）**無 403** → user 泡泡賽車綠／bot 泡泡純白（風格 C 確認）。**教訓**：per-milestone 綠燈 ≠ 整合可用；跨里程碑的 boot-wiring／回應 header round-trip／CSS link／token 命名一致性，必須以真實瀏覽器把關。hero 浮動圖（`fe/static/img/hero/`）與自託管字型（`fe/static/fonts/`）為使用者待放的二進位檔——缺檔時優雅降級（hero 卡自隱、字型 fallback 系統字），demo 不放也可用。
 
-**成果**：240 離線測試全綠（含凍結 27＋40 守門）＋全 JS 純邏輯套件 0 fail＋手動 smoke 8 檢查點通過＋控制者真實瀏覽器端到端驗證通過（修復 4 個整合缺口）。spec `docs/superpowers/specs/2026-06-07-ui-ux-redesign-sse-byok-design.md`，實作分 M0–M7 多次 commit 於 `feat/ui-ux-redesign`。
+**成果**：242 離線測試全綠（含凍結 27＋40 守門）＋全 JS 純邏輯套件 0 fail＋手動 smoke 8 檢查點通過＋控制者真實瀏覽器端到端驗證通過（修復 4 個整合缺口）。spec `docs/superpowers/specs/2026-06-07-ui-ux-redesign-sse-byok-design.md`，實作分 M0–M7 多次 commit 於 `feat/ui-ux-redesign`。

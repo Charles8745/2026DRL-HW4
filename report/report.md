@@ -128,7 +128,7 @@ groundedness 以**規則比對為主**：蒐集該輪工具回傳的所有價格
 
 ### 7.1 量測結果
 
-**離線（主驗證）**：所有 LLM／embedding／rerank 存取經 `LLM`／`Embedder`／`Reranker` Protocol，注入 scripted `FakeLLM`／`FakeEmbedder`／`FakeReranker` → **240 個單元測試全綠**（零 API 成本、可重現），覆蓋 router／handler 工具迴圈／兩階段確認／groundedness 護欄／governance／OpenAI client 轉接層／混合檢索三段管線。
+**離線（主驗證）**：所有 LLM／embedding／rerank 存取經 `LLM`／`Embedder`／`Reranker` Protocol，注入 scripted `FakeLLM`／`FakeEmbedder`／`FakeReranker` → **242 個單元測試全綠**（零 API 成本、可重現），覆蓋 router／handler 工具迴圈／兩階段確認／groundedness 護欄／governance／OpenAI client 轉接層／混合檢索三段管線。
 
 **真實端到端**（backend = **OpenAI `gpt-4.1-mini`**，`temperature=0`；27 題一次跑完、0 error、108 次 API 呼叫含 4 題第二輪；`python -m be.eval.run_full`，原始數據見 `be/eval/results.json`）：
 
@@ -237,7 +237,7 @@ groundedness 以**規則比對為主**：蒐集該輪工具回傳的所有價格
 **修補（便宜的真缺口，認誠處置）：**
 - 量測顯示 sec-02/03 的中文 injection 變體**繞過關鍵字守門**（僅靠模型善意攔下）。已擴充 `governance._INJECTION`（系統提示／開發者模式／印出指令／無視先前等變體），守門對 injection-style 探針的攔截覆蓋由 **2/4 提升至 4/4**（離線 governance 測試佐證）。
 - **對資料集 pass_rate 無可見變化**（0.75→0.725 為非決定性，非回歸）：因模型本來就會拒絕，此修補屬**縱深防禦**——不再單靠模型善意。
-- **零回歸**：改 governance 後全離線測試綠（240 passed，含 `test_main_testset_frozen_at_27`）。
+- **零回歸**：改 governance 後全離線測試綠（242 passed，含 `test_main_testset_frozen_at_27`）。
 
 **未解決（future work）：** 關鍵字 blocklist 無法窮舉 → 需 LLM-based injection 偵測；groundedness 事實白名單僅價格、且價格未正規化（「30萬」↔300000）→ mileage／規格-aware 抽取；多輪「找車→約看第一台」偶發未觸發 book_viewing（usg-10，非決定性；與 multi-03 橋接同屬 future work）。
 
@@ -253,10 +253,10 @@ groundedness 以**規則比對為主**：蒐集該輪工具回傳的所有價格
 
 **部署（單實例、SSE-safe）**：gunicorn `gthread`、`workers` 硬鉗為 1（boot self-check 拒 >1）、`X-Accel-Buffering: no`（R10/R11）；`wsgi.py` 以 `assert not app.debug` 強制非 debug；Render/Docker 皆單實例、健康檢查 `/`，**公開主機絕不設 `OPENAI_API_KEY`**（生產＝BYOK only，R1，DEPLOY.md 粗體警語）。風險登記簿 6 critical／9 high 風險全於設計階段吸收，逐項對應守門測試。
 
-**回歸保證**：全離線單元測試 240 個全綠（新增 SSE/BYOK/安全/部署/JS-mirror 測試，0 真實網路、全 `Fake*`/spy），凍結基準（27 題主 eval、40 題 robustness、`*results*.json`）一字未動，主 27 題 router 0.889 不變——觀察層與 BYOK 對既有管線**零行為變更**。
+**回歸保證**：全離線單元測試 242 個全綠（新增 SSE/BYOK/安全/部署/JS-mirror 測試，0 真實網路、全 `Fake*`/spy），凍結基準（27 題主 eval、40 題 robustness、`*results*.json`）一字未動，主 27 題 router 0.889 不變——觀察層與 BYOK 對既有管線**零行為變更**。
 
 ## 9. 結論
 
-本系統以 LLM 為控制器、function calling 為手段，完整實作標準 AI Harness 六大元件，並以情境隔離、兩階段確認、groundedness 護欄與結構化稽核確保**邏輯一致性與可解釋性**。找車推薦情境再加上 **BM25 + 向量(RAG) + Rerank 三段混合檢索階段**（§2.1），ablation 顯示向量召回與 rerank 排序各有清楚可量化的貢獻（§7.4）。再以獨立的 **40 題 robustness eval**（使用情境／邊緣／異常／安全；§7.6）量測管線健壯性：路由 100%、零崩潰、查無誠實回報、確認閘抗繞過、安全 10/10；並認誠揭露 `grounded` 主要缺口實為計分器對合法里程的偽陽性（非幻覺），順手修補了 injection 守門對中文變體的縱深防禦缺口。所有 LLM／embedding／rerank 存取經 `LLM`／`Embedder`／`Reranker` Protocol 抽象，使整個 harness 可離線、可重現地單元測試（240 tests），並可無痛切換後端（本次由 Gemini 遷移至 OpenAI `gpt-4.1-mini`，管線零改動），是一個兼顧設計完整性與工程可驗證性的 AI 系統設計範例。
+本系統以 LLM 為控制器、function calling 為手段，完整實作標準 AI Harness 六大元件，並以情境隔離、兩階段確認、groundedness 護欄與結構化稽核確保**邏輯一致性與可解釋性**。找車推薦情境再加上 **BM25 + 向量(RAG) + Rerank 三段混合檢索階段**（§2.1），ablation 顯示向量召回與 rerank 排序各有清楚可量化的貢獻（§7.4）。再以獨立的 **40 題 robustness eval**（使用情境／邊緣／異常／安全；§7.6）量測管線健壯性：路由 100%、零崩潰、查無誠實回報、確認閘抗繞過、安全 10/10；並認誠揭露 `grounded` 主要缺口實為計分器對合法里程的偽陽性（非幻覺），順手修補了 injection 守門對中文變體的縱深防禦缺口。所有 LLM／embedding／rerank 存取經 `LLM`／`Embedder`／`Reranker` Protocol 抽象，使整個 harness 可離線、可重現地單元測試（242 tests），並可無痛切換後端（本次由 Gemini 遷移至 OpenAI `gpt-4.1-mini`，管線零改動），是一個兼顧設計完整性與工程可驗證性的 AI 系統設計範例。
 
 *附：系統架構與 tool-chain 視覺化見 `report/infographic.html`／`infographic.png`；完整規格見 `docs/superpowers/specs/`；設計與開發歷程見 `log.md`。*
