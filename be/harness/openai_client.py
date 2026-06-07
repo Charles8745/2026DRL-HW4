@@ -26,7 +26,9 @@ class OpenAIClient:
 
     def __init__(self, api_key: str = None, model: str = None):
         self.model = model or config.MODEL
-        self.client = OpenAI(api_key=api_key or config.API_KEY)
+        # timeout < StreamRunner wall-clock; max_retries=0 so retries can't exceed it.
+        self.client = OpenAI(api_key=api_key or config.API_KEY,
+                             timeout=config.OPENAI_TIMEOUT, max_retries=0)
 
     def generate(self, system, messages, tools=None) -> LLMResponse:
         kwargs = {"model": self.model, "messages": _to_openai_messages(system, messages),

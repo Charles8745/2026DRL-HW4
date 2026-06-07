@@ -30,7 +30,9 @@ class FakeEmbedder:
 class OpenAIEmbedder:
     def __init__(self, api_key: str | None = None, model: str | None = None):
         from openai import OpenAI
-        self._client = OpenAI(api_key=api_key or config.API_KEY)
+        # timeout < StreamRunner wall-clock; max_retries=0 so retries can't exceed it.
+        self._client = OpenAI(api_key=api_key or config.API_KEY,
+                              timeout=config.OPENAI_TIMEOUT, max_retries=0)
         self.model = model or config.EMBED_MODEL
 
     def embed(self, texts: list[str]) -> list[list[float]]:
