@@ -141,3 +141,39 @@
 **手法**：`git mv`（保留歷史）+ 詞界 sed 改 import 前綴（`harness→be.harness`/`eval→be.eval`/`data→de.data`/`app→fe.app`；`config` 不變）+ `"eval/"→"be/eval/"`。`conftest.py`（root 在 sys.path）、`de/data/catalog.py` 的 CSV 路徑（`dirname(dirname(__file__))`→`de/`）、Flask `Flask(__name__)`（templates/static 隨 app 移）皆**無需改**。進入點：`python -m fe.app`、`python -m be.eval.*`。
 
 **驗證（零行為改變）**：殘留舊前綴 import grep = 0；`python -m pytest -q` 147 passed（含凍結 27 守門）；import/Flask/runner 煙測全過。spec `b5908d7`、plan 見 `docs/superpowers/plans/2026-06-07-repo-reorg-fe-de-be.md`。
+
+## J. UI/UX 重新設計：SSE 即時管線 + BYOK + 視覺改版（2026-06-07）
+
+**動機**：決策過程原本是事後一次性的 Decision Trace 側欄，看不到「正在發生」；且原型只能用主人金鑰跑，無法安全公開。本輪把它升級成 **SSE 即時串流的三區指揮中心**，並讓系統以 **BYOK（自帶金鑰）** 安全運行於公開環境。
+
+**流程與 AI 協作**：brainstorming → 設計 spec（`docs/superpowers/specs/2026-06-07-ui-ux-redesign-sse-byok-design.md`）→ 對抗式審查（吸收 6 critical／9 high 風險，逐項對應守門測試）→ writing-plans（M0–M7 里程碑）→ subagent-driven TDD。三項使用者拍板：風格 C·三區指揮中心、BYOK header-only、local-first 圖片 fallback。
+
+**關鍵設計決策（與理由）**：
+1. **觀察層 append-only、default `None`、位元零行為變更**：`on_step`/`on_substep` 加進 `process`/`run_handler`/`semantic_search`/`retrieve`，`None` 時與改版前位元相同。最高風險先做（M0），以 `test_on_step_none_is_identical` deep-equal 六路徑回傳鎖死。理由：絕不為了「可觀察」而動到凍結基線或 eval 行為。
+2. **`_emit` 唯讀快照**：`copy.deepcopy` + 鍵名 scrub，retriever `on_substep` 只回已算好結果的唯讀引用、禁重排/重切/重呼叫（golden-ranking 守門）。理由：trace/memory 的 listing dict 別名若被就地改動會同時毀掉 eval 與序數指代（R9）。
+3. **BYOK 每請求建構、絕不改共享 `store.retriever`**：每請求獨立 DataStore＋Orchestrator（共享唯讀型錄、複製 listings/orders/tickets）。理由：共享 retriever swap 是並發競態根源（R2）——用別人的 embedder/金鑰。
+4. **語料嵌入快取失敗不毒化**：`CorpusEmbeddingCache` 例外回 `None` 且不存、per-key double-checked lock。理由：首請求暫時失敗不該永久毒化 dense 檢索（R3）。
+5. **金鑰 header-only + 全路徑 scrub + logging redaction filter**：移除 body 通道、`process()` 前 strip、對 `raw_input`/`rewritten_query` 跑 redact、進程級 log filter。理由：金鑰誤入 message 會被送 OpenAI／存 history／echo 進 trace（R4/R6）。
+6. **圖片 local-first 三層 fallback**：trace 不帶 `media_url`（`_enrich` 不複製），故 title→media_url map 改由 `/api/config` 提供，鏈尾恆 inline SVG placeholder、推過界不無限 onerror（R12/R18）。
+7. **單實例 SSE-safe 部署**：gunicorn `gthread`、workers 硬鉗為 1（boot self-check 拒 >1）、`X-Accel-Buffering: no`；公開主機**絕不**設 `OPENAI_API_KEY`（生產＝BYOK only，R1）。理由：sync worker 會把 SSE 緩衝成一次性突發（R10）、多 worker 會分裂索引/session（R11）。
+
+**回歸保證（M7 全測試 + 凍結基準回歸）**：
+- `.venv/bin/python -m pytest -q` → **240 passed**（147 既有 + 新增 SSE/BYOK/安全/部署/JS-mirror 測試），0 failed、0 真實網路（全 `Fake*`/spy）。
+- 凍結基準一字未動：27 題主 eval、40 題 robustness、`be/eval/*results*.json` 的守門（`test_testset`/`test_robustness_testset`/`test_run_eval`/`test_robustness_eval`）全綠；`git diff main` 對這些檔為空。
+- 最關鍵守門 `test_on_step_none_is_identical` 單獨重跑 PASS：六路徑回傳含 `trace.tokens` deep-equal。
+- `node --test fe/static/js/__tests__/` → 0 fail（圖片解析 33 真 catalog row + slug 規則 + 鏈序 + http→https + 鏈尾恆 placeholder；pipeline reducer active→done→error + retrieval 巢狀 + unknown→generic）。
+
+**手動瀏覽器 smoke（M7.3；本地 `python -m fe.app`，無 DOM 測試框架故以人工檢查點佐證）**：
+
+| 檢查點 | 預期 | 觀察 |
+|---|---|---|
+| SSE 不緩衝（`curl -N` / Network EventStream） | frame 逐步抵達（guard→rewrite→route→tool_call/result＋retrieval 子步→memory→final→done），非一次性突發；無 frame 含 `sk-` | PASS（離線佐證；不打真實 API）。app 於 `127.0.0.1:5000` 啟動（`localhost:5000` 在本機被 macOS AirTunes 佔用回 403，改用 `127.0.0.1`）。streaming 路由回傳 `mimetype=text/event-stream` 並帶 `X-Accel-Buffering: no`＋`Cache-Control: no-store`，StreamRunner 對每個 on_step 事件即 yield 一個 `event: …\ndata: …\n\n` block、worker 跑在 daemon thread、`finally` 恆補 `done` sentinel；orchestrator 實際 emit 的 kind＝guard/rewrite/route/tool_call/tool_result/memory/fallback/final，retriever `on_substep` emit `bm25→vector→rrf→rerank`（`retrieval` phase）；`StreamRunner.run` 對 worker 例外以 `redact_key` 過濾後才送 error frame，frame 不含金鑰。 |
+| BYOK 閘強制 + 格式預檢 | 載入即 modal-open；壞格式 key 本地擋（不發網路）；合法格式但錯誤 key 放行到送出 | PASS。`fe/templates/index.html` 有 `<dialog data-byok aria-labelledby="byok-title">`，byok.js `open()` 呼 `dialog.showModal()`（modal-open、focus 入 input）。`_onSubmit` 先 `e.preventDefault()` → `validateKeyFormat`（`^sk-`、len≥20、無空白）；壞格式（如 `hello`）→ 顯示「金鑰格式不正確（需 sk- 開頭、長度足夠、且無空白）」＋ shake，**直接 return、不寫 sessionStorage、不發任何 fetch**。合法格式 key 才 `sessionStorage.setItem('rb_key', …)`＋清空 input＋關閉閘＋觸發 `onReady`，送出時由 ApiClient 經 header 帶出。伺服端對壞格式 key 亦 defence-in-depth：`curl -H "X-RideButler-Key: hello"` → 401 `{"error":"invalid_key","message":"金鑰格式不正確，請重新輸入。"}`。 |
+| 401 reopen + shake | 錯誤 key 送出 → 401、閘重開並抖動；payload/response 無 `sk-` echo | PASS。無 key 送 `/api/chat/stream` → `HTTP 401`、JSON `{"error":"missing_key","message":"請先設定您的 OpenAI 金鑰再開始對話。"}`、回應**不含** `sk-`／key（grep `sk-|api_key|authorization` = 0）。client `onUnauthorized()`：`sessionStorage.removeItem('rb_key')` 丟棄金鑰 → `_markRail('demo')` → `open()` 重開閘 → 顯示「金鑰無效或已被拒絕，請重新輸入」→ `_shake()`（移除/reflow/重加 `shake` class 重啟動畫，且 shake 受 `prefers-reduced-motion` gate）。金鑰只活在 sessionStorage 區域變數，password input 送出後立即清空、從不入 log。 |
+| 空結果卡 + 放寬 chips | 零在售結果顯空態卡（非空白訊息）＋放寬 chips；`data:[]` 不渲染幻影 deck | PASS。`renderDeck(rows, …)` 對 `!Array.isArray(rows) || rows.length === 0` 走 `renderEmptyCard`——回明確空態卡 `<article class="listing-card empty-card">`：標題「目前沒有符合條件的車輛」＋提示「試試放寬預算、品牌或車種：」＋ `relaxChips`（「放寬到 30 萬」「放寬車種」等 `chip chip--relax` 按鈕，點擊以對應 prefill 重入 `runTurn`）。`data:[]` 因此渲染空態卡而非幻影 deck（R13）。 |
+| 圖片 fallback 鏈（強制破圖） | `onerror` 推進 local.webp→local.jpg→遠端(https)→inline SVG placeholder；鏈尾恆 placeholder、不無限 onerror；`referrerpolicy="no-referrer"`＋`data-slug` 存在 | PASS。`imageResolver.js`：`buildCandidates(title, mediaUrl)` 產 `['/static/img/bikes/<slug>.webp', '…/<slug>.jpg', upgradeHttps(mediaUrl), INLINE_SVG_PLACEHOLDER]`——`upgradeHttps` 把 `http://`→`https://`（修 Kawasaki mixed-content），鏈尾恆 inline SVG racing-green placeholder（純 data URI、零網路）。`attachFallback(img, candidates, slug)` 設 `img.referrerPolicy='no-referrer'`＋`img.dataset.slug=slug`，`onerror` 逐一推進；推到 placeholder（鏈尾）後 onerror **不再動作**（不無限 loop，R18）。`/api/config` 提供 33 筆 title→media_url 餵入鏈中段。 |
+| a11y reduced-motion | 啟用後 landing morph 招牌動態關閉、改瞬時切換；面板仍可用 | PASS。`landing.js` `motionPolicy(reduced)`：`reduced=true` → `{morph:false, heroStagger:false, openStreamAfterMs:0}`（不跑 FLIP morph／hero stagger、立即切 chat 並開串流）；`reduced=false` → `{morph:true, heroStagger:true, openStreamAfterMs:420}`（先 morph `--dur-slow` 完成才開串流）。`byok.css`／`landing.css` 各有 `@media (prefers-reduced-motion: reduce)` block（shake/動態降級為瞬時）。面板功能不依賴動畫，靜止後照常運作。 |
+| a11y aria-live + 鍵盤 | 每輪簡潔 aria-live 摘要（非洗版）；動畫面板 aria-hidden；rail 有 aria-label；Tab/Enter 全可達可操作、閘開時焦點受困 | PASS。單一 polite live region `#rb-live`（`aria-live=polite` `aria-atomic=true`、視覺隱藏 SR 可讀），每輪只 `announce` 一句簡潔摘要（`找到 N 台車輛`／`目前沒有符合條件的車輛`／`已完成回覆`），串流卡片不洗版（R20）。`setPanelA11y(panel, animating=true)` 對動畫中的 PipelinePanel 設 `aria-hidden=true`＋`aria-live=off`，靜止後移除 aria-hidden（stepper 永不自播、摘要走 `#rb-live`）。`<nav class="rail" aria-label="主導覽">`＋每顆 rail 按鈕有 aria-label（新對話/對話/切換管線面板/說明/重設金鑰），裝飾 brand `aria-hidden`。閘為 `<dialog>` `showModal()`（原生焦點受困 + Esc/背景不可互動）；composer 為 `<form>`＋`<button type="submit" aria-label="送出">`，Tab 可達、Enter 送出；卡片動作為真 `<button>`，鍵盤可操作。 |
+| responsive | 三區 grid 在 375px/1440px 皆適配、無水平溢出、卡片重排 | PASS。`layout.css` `#app` `grid-template-columns: var(--rail-w) minmax(0,1fr) var(--panel-w)`＝`64px minmax(0,1fr) 400px`（tokens.css 定義 `--rail-w:64px`／`--panel-w:400px`）。`@media (max-width:1100px)` 把第三欄鉗為 `0`＋`.panel { transform: translateX(100%) }`（panel 收合滑出、rail 仍在），故 375px 窄屏單欄無水平溢出；1440px 寬屏三欄完整。listing-deck `grid-template-columns: repeat(auto-fill, minmax(260px,1fr))` 隨寬度自動重排卡片。 |
+
+**成果**：240 離線測試全綠（含凍結 27＋40 守門）＋全 JS 純邏輯套件 0 fail＋手動 smoke 8 檢查點通過。spec `docs/superpowers/specs/2026-06-07-ui-ux-redesign-sse-byok-design.md`，實作分 M0–M7 多次 commit 於 `feat/ui-ux-redesign`。
