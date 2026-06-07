@@ -133,9 +133,9 @@ class Orchestrator:
             reply = resp.text or "我是二手重機客服，可協助找車、比規格、查訂單與售後。"
             self.memory.append_message(sid, "assistant", reply)
             ret = {"reply": reply, "blocked": False, "awaiting_confirmation": False,
-                   "trace": {"raw_input": user_input, "rewritten_query": rw["rewritten_query"],
-                             "router_label": label, "resolved_listing_id": rw["resolved_listing_id"],
-                             "steps": [], "tokens": tokens}}
+                   "trace": _scrub({"raw_input": user_input, "rewritten_query": rw["rewritten_query"],
+                                    "router_label": label, "resolved_listing_id": rw["resolved_listing_id"],
+                                    "steps": [], "tokens": tokens})}
             self._emit(on_step, "fallback", {"reply_preview": reply[:80]})
             self._emit(on_step, "memory", {"viewed_count": len(slots.get("viewed_listings") or []),
                                            "slots": {"budget": slots.get("budget"),
@@ -188,9 +188,9 @@ class Orchestrator:
 
         self.memory.append_message(sid, "assistant", reply)
         ret = {"reply": reply, "blocked": False, "awaiting_confirmation": awaiting,
-               "trace": {"raw_input": user_input, "rewritten_query": rw["rewritten_query"],
-                         "router_label": label, "resolved_listing_id": rw["resolved_listing_id"],
-                         "steps": steps, "tokens": tokens}}
+               "trace": _scrub({"raw_input": user_input, "rewritten_query": rw["rewritten_query"],
+                                "router_label": label, "resolved_listing_id": rw["resolved_listing_id"],
+                                "steps": steps, "tokens": tokens})}
         self._emit(on_step, "memory", {"viewed_count": len(slots.get("viewed_listings") or []),
                                        "slots": {"budget": slots.get("budget"),
                                                  "brand_pref": slots.get("brand_pref"),

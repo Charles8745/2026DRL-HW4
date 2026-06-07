@@ -82,6 +82,24 @@ def test_key_in_message_scrubbed_from_trace(monkeypatch):
     assert "sk-LEAKCANARY" not in blob
 
 
+# --- D2. same key-in-message case on the NON-streamed /api/chat JSON turn --------
+# Plan intent (line 3817): the key-in-message scrub is asserted on BOTH the streamed
+# `final` frame AND the /api/chat JSON. The returned trace (raw_input/rewritten_query)
+# must be scrubbed too — not only the _emit path.
+def test_key_in_message_scrubbed_from_chat_json(monkeypatch):
+    script = [LLMResponse(text=f"我的金鑰是 {CANARY} 幫我推薦", total_tokens=1),   # rewrite echoes it
+              LLMResponse(text="閒聊範圍外", total_tokens=1),
+              LLMResponse(text="我是重機客服", total_tokens=1)]
+    app = _byok_app(monkeypatch, script)
+    r = app.test_client().post("/api/chat",
+                               json={"message": f"我的金鑰是 {CANARY} 幫我推薦", "session_id": "MJ"},
+                               headers={"X-RideButler-Key": CANARY})
+    assert r.status_code == 200
+    raw = r.get_data(as_text=True)
+    assert "sk-LEAKCANARY" not in raw
+    assert "sk-LEAKCANARY" not in json.dumps(r.get_json(), ensure_ascii=False)
+
+
 # --- E. trace carries no key-shaped key NAMES -----------------------------------
 def test_trace_has_no_keylike_field_names(monkeypatch):
     from be.harness.llm import ToolCall
