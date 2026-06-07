@@ -1,6 +1,7 @@
 import json
 from collections import Counter
 from eval.robustness_eval import CATEGORIES, CHECK_KEYS
+from harness.router import LABELS
 
 CASES = json.load(open("eval/robustness_testset.json", encoding="utf-8"))
 
@@ -40,7 +41,7 @@ def test_check_values_well_formed():
         for blk in ("expect", "expect_turn2"):
             for k, v in (c.get(blk) or {}).items():
                 if k == "router_label":
-                    assert isinstance(v, str) and v, (c["id"], blk, k)
+                    assert isinstance(v, str) and v in LABELS, (c["id"], blk, k, v)
                 elif k == "tools":
                     assert isinstance(v, list) and v, (c["id"], blk, k)
                 else:
