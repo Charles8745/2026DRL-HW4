@@ -1,0 +1,10 @@
+.venv
+.git
+__pycache__
+.pytest_cache
+.env
+.env.*
+.superpowers
+HANDOFF.md
+*.pyc
+.DS_Store
