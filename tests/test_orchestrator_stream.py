@@ -108,3 +108,102 @@ def test_on_step_none_is_identical():
         collected = []
         outs_coll = _run_plan(o_coll, plan_coll, lambda et, d: collected.append((et, d)))
         assert outs_none == outs_coll, f"return dict diverged with a collector for {make.__name__}"
+
+
+def _collect(make):
+    o, plan = make()
+    events = []
+    for sid, text in plan:
+        o.process(sid, text, on_step=lambda et, d: events.append((et, d)))
+    return o, events
+
+
+def test_guard_path_emits_guard_then_final_zero_llm():
+    o, events = _collect(_script_guard)
+    types = [et for et, _ in events]
+    assert types == ["guard", "final"]
+    assert events[0][1] == {"blocked": True, "reason": "疑似 prompt-injection"}
+    assert o.llm.calls == 0
+
+
+def test_pending_yes_emits_confirm_gate_executed_then_final_zero_llm_on_turn2():
+    o = _orch([
+        LLMResponse(text="幫我約L001看車", total_tokens=1),
+        LLMResponse(text="交易訂單", total_tokens=1),
+        LLMResponse(tool_calls=[ToolCall("book_viewing",
+            {"listing_id": "L001", "datetime": "2026-06-13", "contact": "0912"})], total_tokens=1),
+    ])
+    sid = o.memory.new_session()
+    o.process(sid, "幫我約L001看車")               # turn-1 (no observer)
+    calls_before = o.llm.calls
+    ev = []
+    o.process(sid, "確認", on_step=lambda et, d: ev.append((et, d)))   # turn-2
+    assert o.llm.calls == calls_before              # 0 LLM calls on confirm-resume
+    types = [et for et, _ in ev]
+    # guard fires unconditionally (blocked=False) before the pending-resume branch
+    assert types == ["guard", "confirm_gate", "final"]
+    gate = next(d for et, d in ev if et == "confirm_gate")
+    assert gate["stage"] == "executed"
+    assert gate["tool_result"]["ok"] is True
+
+
+def test_pending_cancel_emits_confirm_gate_cancelled_then_final_zero_llm():
+    o = _orch([
+        LLMResponse(text="幫我約L001看車", total_tokens=1),
+        LLMResponse(text="交易訂單", total_tokens=1),
+        LLMResponse(tool_calls=[ToolCall("book_viewing",
+            {"listing_id": "L001", "datetime": "2026-06-13", "contact": "0912"})], total_tokens=1),
+    ])
+    sid = o.memory.new_session()
+    o.process(sid, "幫我約L001看車")
+    calls_before = o.llm.calls
+    ev = []
+    o.process(sid, "不要", on_step=lambda et, d: ev.append((et, d)))
+    assert o.llm.calls == calls_before
+    types = [et for et, _ in ev]
+    # guard fires unconditionally (blocked=False) before the pending-resume branch
+    assert types == ["guard", "confirm_gate", "final"]
+    gate = next(d for et, d in ev if et == "confirm_gate")
+    assert gate["stage"] == "cancelled"
+
+
+def test_fallback_path_event_sequence():
+    o, events = _collect(_script_fallback)
+    types = [et for et, _ in events]
+    assert types == ["guard", "rewrite", "route", "fallback", "memory", "final"]
+    assert events[-1][1]["trace"]["steps"] == []
+
+
+def test_recommend_path_emits_tool_call_then_tool_result():
+    o, events = _collect(_script_recommend)
+    types = [et for et, _ in events]
+    assert types == ["guard", "rewrite", "route", "tool_call", "tool_result", "memory", "final"]
+    tc = next(d for et, d in events if et == "tool_call")
+    assert tc == {"name": "recommend", "args": {"budget": 300000, "usage": "sport"}, "index": 0}
+    tr = next(d for et, d in events if et == "tool_result")
+    assert tr["name"] == "recommend" and tr["index"] == 0 and tr["ok"] is True and tr["error"] is None
+    # result_summary is a whitelisted subset projection of listing rows (spec §2.2)
+    assert tr["result_summary"], "recommend returns rows -> non-empty summary"
+    allowed = {"listing_id", "model", "brand", "asking_price", "year", "condition",
+               "match_snippet", "retrieval_rank"}
+    for row in tr["result_summary"]:
+        assert set(row).issubset(allowed)
+        assert "media_url" not in row and "specs" not in row
+
+
+def test_proposed_short_circuit_emits_tool_call_and_proposed_result():
+    o = _orch([
+        LLMResponse(text="幫我約L001看車", total_tokens=1),
+        LLMResponse(text="交易訂單", total_tokens=1),
+        LLMResponse(tool_calls=[ToolCall("book_viewing",
+            {"listing_id": "L001", "datetime": "2026-06-13", "contact": "0912"})], total_tokens=1),
+    ])
+    sid = o.memory.new_session()
+    ev = []
+    o.process(sid, "幫我約L001看車", on_step=lambda et, d: ev.append((et, d)))
+    tc = next(d for et, d in ev if et == "tool_call")
+    assert tc["name"] == "book_viewing" and tc["index"] == 0
+    tr = next(d for et, d in ev if et == "tool_result")
+    assert tr["name"] == "book_viewing" and tr.get("proposed") is True and tr["ok"] is None
+    assert ("confirm_gate", ) not in []  # confirm_gate(proposed) also present:
+    assert any(et == "confirm_gate" and d["stage"] == "proposed" for et, d in ev)
