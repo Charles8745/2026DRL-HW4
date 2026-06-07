@@ -178,3 +178,94 @@ def test_extract_env_fallback_requires_allow_env(monkeypatch):
     monkeypatch.setattr(_config_mod, "API_KEY", "sk-" + "e" * 20, raising=False)
     req = _FakeReq(headers={}, remote_addr="127.0.0.1")
     assert keyauth.extract_request_key(req, allow_env=False) is None
+
+
+from be.harness.orchestrator import Orchestrator
+from be.harness.memory import SessionStore
+
+
+def _spy_factories():
+    """Returns (llm_factory, embedder_factory, seen) where seen records the keys
+    each factory was constructed with — to assert request-key (not config.API_KEY)."""
+    seen = {"llm_keys": [], "embed_keys": []}
+
+    class _SpyLLM:
+        def __init__(self, key):
+            seen["llm_keys"].append(key)
+            self.key = key
+
+        def generate(self, system, messages, tools=None):
+            from be.harness.llm import LLMResponse
+            return LLMResponse(text="ok", tool_calls=[], total_tokens=0)
+
+    class _SpyEmb(FakeEmbedder):
+        def __init__(self, key):
+            super().__init__()
+            seen["embed_keys"].append(key)
+            self.key = key
+
+    return _SpyLLM, _SpyEmb, seen
+
+
+def test_build_uses_request_key_not_config(monkeypatch):
+    monkeypatch.setattr(_config_mod, "API_KEY", "sk-" + "OWNER" * 4, raising=False)
+    llm_f, emb_f, seen = _spy_factories()
+    cache = CorpusEmbeddingCache()
+    req_key = "sk-" + "REQ12345" * 3
+    orch = keyauth.build_request_orchestrator(
+        req_key, model="m", embed_model="em", memory=SessionStore(),
+        corpus_cache=cache, llm_factory=llm_f, embedder_factory=emb_f)
+    assert isinstance(orch, Orchestrator)
+    assert seen["llm_keys"] == [req_key]
+    assert seen["embed_keys"] == [req_key]
+    assert _config_mod.API_KEY not in seen["llm_keys"]
+
+
+def test_build_per_request_datastore_isolated(monkeypatch):
+    llm_f, emb_f, _ = _spy_factories()
+    cache = CorpusEmbeddingCache()
+    mem = SessionStore()
+    o1 = keyauth.build_request_orchestrator(
+        "sk-" + "a" * 20, model="m", embed_model="em", memory=mem,
+        corpus_cache=cache, llm_factory=llm_f, embedder_factory=emb_f)
+    o2 = keyauth.build_request_orchestrator(
+        "sk-" + "b" * 20, model="m", embed_model="em", memory=mem,
+        corpus_cache=cache, llm_factory=llm_f, embedder_factory=emb_f)
+    assert o1.store is not o2.store                 # separate DataStore objects
+    assert o1.store.listings is not o2.store.listings
+    assert o1.store.orders is not o2.store.orders
+    assert o1.store.tickets is not o2.store.tickets
+    assert o1.store.catalog is o2.store.catalog     # catalog shared read-only
+    assert o1.memory is o2.memory is mem            # SessionStore shared
+    # mutating one DataStore's tickets must not bleed into the other
+    o1.store.add_ticket("客訴", "x")
+    assert len(o1.store.tickets) == 1 and len(o2.store.tickets) == 0
+
+
+def test_build_embeds_corpus_once_across_requests(monkeypatch):
+    llm_f, emb_f, seen = _spy_factories()
+    cache = CorpusEmbeddingCache()
+    mem = SessionStore()
+    o1 = keyauth.build_request_orchestrator(
+        "sk-" + "a" * 20, model="m", embed_model="em", memory=mem,
+        corpus_cache=cache, llm_factory=llm_f, embedder_factory=emb_f)
+    o2 = keyauth.build_request_orchestrator(
+        "sk-" + "b" * 20, model="m", embed_model="em", memory=mem,
+        corpus_cache=cache, llm_factory=llm_f, embedder_factory=emb_f)
+    # both retrievers share the same cached VectorStore (embedded once)
+    assert o1.store.retriever.vstore is o2.store.retriever.vstore
+
+
+def test_build_no_key_material_in_orchestrator_vars():
+    llm_f, emb_f, _ = _spy_factories()
+    cache = CorpusEmbeddingCache()
+    secret = "sk-" + "CANARY12" * 3
+    orch = keyauth.build_request_orchestrator(
+        secret, model="m", embed_model="em", memory=SessionStore(),
+        corpus_cache=cache, llm_factory=llm_f, embedder_factory=emb_f)
+    # The key legitimately lives ENCAPSULATED inside the client/embedder (e.g.
+    # orch.store.retriever.embedder.key) — that is by design. This sweep only proves
+    # the key is not LOOSELY attached to the top-level Orchestrator / DataStore surface
+    # (str(vars(...)) renders nested objects as <... object at 0x...> and does NOT
+    # expand embedder.key, so this is a top-level-surface check, not a deep walk).
+    assert secret not in (str(vars(orch)) + str(vars(orch.store)))
