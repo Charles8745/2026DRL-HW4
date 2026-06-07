@@ -244,3 +244,73 @@ def test_semantic_search_flat_list_return_unchanged_with_observer():
     observed = semantic_search(store, "通勤省油速克達", on_substep=lambda *a: None)
     assert golden == observed
     assert isinstance(golden["data"], list)
+
+
+def test_observer_raises_does_not_change_return():
+    """An observer that raises on every event must not change the return dict."""
+    def boom(et, d):
+        raise RuntimeError("observer blew up")
+    for make in _SCRIPTS:
+        o_none, plan_none = make()
+        o_boom, plan_boom = make()
+        outs_none = _run_plan(o_none, plan_none, None)
+        outs_boom = _run_plan(o_boom, plan_boom, boom)
+        assert outs_none == outs_boom, f"raising observer changed return for {make.__name__}"
+
+
+def test_observer_mutating_payload_does_not_corrupt_trace_or_slots():
+    """Mutating the payload an observer receives must NOT reach back into the live
+    trace rows or memory slots (deepcopy+scrub isolation)."""
+    o = _orch([
+        LLMResponse(text="推薦30萬sport", total_tokens=2),
+        LLMResponse(text="找車推薦", total_tokens=1),
+        LLMResponse(tool_calls=[ToolCall("recommend", {"budget": 300000, "usage": "sport"})], total_tokens=5),
+        LLMResponse(text="為您推薦這幾台", total_tokens=4),
+    ])
+    sid = o.memory.new_session()
+
+    def vandal(et, d):
+        # try to corrupt whatever we receive
+        if isinstance(d, dict):
+            d.clear()
+            d["HACKED"] = True
+    out = o.process(sid, "30萬sport", on_step=vandal)
+    # 1) trace rows survive intact: tool_result.data is a non-empty list of full listing dicts
+    steps = out["trace"]["steps"]
+    rec = next(s for s in steps if s["tool_name"] == "recommend")
+    data = rec["tool_result"]["data"]
+    assert isinstance(data, list) and data
+    assert "asking_price" in data[0] and "specs" in data[0]   # full enriched row, not a projection
+    assert "HACKED" not in rec["tool_result"]
+    # 2) viewed_listings retain full dicts (not the whitelisted memory-event subset)
+    viewed = o.memory.get(sid)["slots"]["viewed_listings"]
+    assert viewed and "asking_price" in viewed[0] and "specs" in viewed[0]
+
+
+def test_recommend_data_deep_equal_to_none_version():
+    """The collector run must leave trace.steps[i].tool_result.data deep-equal to
+    the on_step=None run — read-only snapshots never reslice/realias the live data."""
+    def make():
+        return _orch([
+            LLMResponse(text="推薦30萬sport", total_tokens=2),
+            LLMResponse(text="找車推薦", total_tokens=1),
+            LLMResponse(tool_calls=[ToolCall("recommend", {"budget": 300000, "usage": "sport"})], total_tokens=5),
+            LLMResponse(text="為您推薦這幾台", total_tokens=4),
+        ])
+    o1 = make(); sid1 = o1.memory.new_session()
+    out1 = o1.process(sid1, "30萬sport", on_step=None)
+    o2 = make(); sid2 = o2.memory.new_session()
+    out2 = o2.process(sid2, "30萬sport", on_step=lambda *a: None)
+    d1 = next(s for s in out1["trace"]["steps"] if s["tool_name"] == "recommend")["tool_result"]["data"]
+    d2 = next(s for s in out2["trace"]["steps"] if s["tool_name"] == "recommend")["tool_result"]["data"]
+    assert d1 == d2
+
+
+def test_memory_event_whitelist_excludes_viewed_and_pending_action():
+    """The memory event whitelists only viewed_count + {budget,brand_pref,usage,
+    pending_intent} — never viewed_listings contents, history, or pending_action."""
+    o, events = _collect(_script_recommend)
+    mem = next(d for et, d in events if et == "memory")
+    assert set(mem) == {"viewed_count", "slots"}
+    assert set(mem["slots"]) == {"budget", "brand_pref", "usage", "pending_intent"}
+    assert "viewed_listings" not in mem and "pending_action" not in mem["slots"] and "history" not in mem
