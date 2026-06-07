@@ -4223,7 +4223,7 @@ node -e "
 const s=require('fs').readFileSync('fe/static/css/base.css','utf8');
 const o=(s.match(/{/g)||[]).length,c=(s.match(/}/g)||[]).length;
 if(o!==c){console.error('brace mismatch',o,c);process.exit(1)}
-if((s.match(/@font-face/g)||[]).length!==3){console.error('expected 3 @font-face');process.exit(1)}
+if((s.match(/@font-face\s*\{/g)||[]).length!==3){console.error('expected 3 @font-face');process.exit(1)}
 if(/#[0-9a-fA-F]{3,8}\b/.test(s)){console.error('bare hex in base.css — must use var(--*)');process.exit(1)}
 console.log('base.css OK braces='+o+' fonts=3 no-bare-hex')
 "
@@ -4231,7 +4231,7 @@ console.log('base.css OK braces='+o+' fonts=3 no-bare-hex')
 
 Expected output:
 ```
-base.css OK braces=13 fonts=3 no-bare-hex
+base.css OK braces=16 fonts=3 no-bare-hex
 ```
 
 - [ ] **Step 4: Commit**
