@@ -178,3 +178,41 @@ export function runSignatureMoment({ landing, shell, panel, text, openStream }) 
     }
   });
 }
+
+// --- a11y（spec §3.4 / R20） ---
+// 單一 polite live region：每輪只播一句簡潔摘要（screen reader 不被串流卡片洗版）。
+export function ensureLiveRegion(doc) {
+  const d = doc || document;
+  let el = d.getElementById('rb-live');
+  if (!el) {
+    el = d.createElement('div');
+    el.id = 'rb-live';
+    el.setAttribute('aria-live', 'polite');
+    el.setAttribute('aria-atomic', 'true');
+    // 視覺隱藏但 SR 可讀。
+    el.style.cssText =
+      'position:absolute;width:1px;height:1px;margin:-1px;padding:0;' +
+      'border:0;clip:rect(0 0 0 0);overflow:hidden;white-space:nowrap;';
+    d.body.appendChild(el);
+  }
+  return el;
+}
+
+// announce：final event 後以 listing 結果數播報。count=null → 中性「已完成回覆」。
+export function announce(count, doc) {
+  const el = ensureLiveRegion(doc);
+  el.textContent = liveSummary(count);
+  return el.textContent;
+}
+
+// setPanelA11y：動畫中的 PipelinePanel aria-hidden + aria-live=off（不洗版）；靜止後恢復。
+export function setPanelA11y(panelEl, animating) {
+  if (!panelEl) return;
+  if (animating) {
+    panelEl.setAttribute('aria-hidden', 'true');
+    panelEl.setAttribute('aria-live', 'off');
+  } else {
+    panelEl.removeAttribute('aria-hidden');
+    panelEl.setAttribute('aria-live', 'off'); // stepper 永不自播；摘要走 #rb-live
+  }
+}

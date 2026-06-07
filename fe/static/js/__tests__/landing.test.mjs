@@ -97,3 +97,57 @@ test('runSignatureMoment(full): skeleton + morph classes first, open deferred un
   assert.equal(opened.length, 1);
   delete globalThis.window;
 });
+
+import { ensureLiveRegion, announce, setPanelA11y } from '../components/landing.js';
+
+// 最小 fake document（僅供 ensureLiveRegion/announce）。
+function fakeDoc() {
+  const byId = {};
+  function mkEl() {
+    const attrs = {};
+    return {
+      id: '', style: { cssText: '' }, textContent: '',
+      setAttribute: (k, v) => { attrs[k] = v; },
+      removeAttribute: (k) => { delete attrs[k]; },
+      getAttribute: (k) => attrs[k],
+      _attrs: attrs,
+    };
+  }
+  return {
+    body: { appendChild: (el) => { if (el.id) byId[el.id] = el; } },
+    getElementById: (id) => byId[id] || null,
+    createElement: () => mkEl(),
+  };
+}
+
+test('ensureLiveRegion creates one polite atomic region and reuses it', () => {
+  const doc = fakeDoc();
+  const a = ensureLiveRegion(doc);
+  assert.equal(a.id, 'rb-live');
+  assert.equal(a.getAttribute('aria-live'), 'polite');
+  assert.equal(a.getAttribute('aria-atomic'), 'true');
+  const b = ensureLiveRegion(doc); // 第二次重用同節點，不新建。
+  assert.equal(a, b);
+});
+
+test('announce writes one concise per-turn summary', () => {
+  const doc = fakeDoc();
+  assert.equal(announce(3, doc), '找到 3 台車輛');
+  assert.equal(doc.getElementById('rb-live').textContent, '找到 3 台車輛');
+  assert.equal(announce(0, doc), '目前沒有符合條件的車輛');
+  assert.equal(announce(null, doc), '已完成回覆');
+});
+
+test('setPanelA11y hides panel from SR while animating, never self-announces when idle', () => {
+  const attrs = {};
+  const panel = {
+    setAttribute: (k, v) => { attrs[k] = v; },
+    removeAttribute: (k) => { delete attrs[k]; },
+  };
+  setPanelA11y(panel, true);
+  assert.equal(attrs['aria-hidden'], 'true');
+  assert.equal(attrs['aria-live'], 'off');
+  setPanelA11y(panel, false);
+  assert.equal(attrs['aria-hidden'], undefined); // 恢復可見
+  assert.equal(attrs['aria-live'], 'off');       // stepper 仍不自播
+});
