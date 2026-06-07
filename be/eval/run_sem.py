@@ -1,4 +1,4 @@
-"""End-to-end sem-* eval: drive eval/sem_testset.json through the real orchestrator
+"""End-to-end sem-* eval: drive be/eval/sem_testset.json through the real orchestrator
 and check that (a) the semantic query fires semantic_search and (b) the grounded
 reply cites only prices/specs the tool returned. Reported separately in report §7.5;
 the frozen 27-case main eval (run_full) is untouched.

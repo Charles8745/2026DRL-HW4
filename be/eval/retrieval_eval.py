@@ -1,4 +1,4 @@
-"""Retrieval ablation eval: recall@k / MRR / nDCG over eval/retrieval_testset.json
+"""Retrieval ablation eval: recall@k / MRR / nDCG over be/eval/retrieval_testset.json
 for three configs (BM25 only / +dense RRF / +rerank), using REAL OpenAI embeddings
 + LLM reranker (like run_full). The rerank stage is non-deterministic, so its config
 is run multiple times and reported as mean ± spread. recall@10 = the RRF candidate-pool

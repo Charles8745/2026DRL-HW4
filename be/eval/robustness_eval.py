@@ -3,7 +3,7 @@ against real OpenAI through the production Orchestrator. Per-case `expect` schem
 only declared checks are evaluated. Honest measurement (NOT a CI gate).
 
 Pure scoring functions live at module top (offline-testable, no API). The real-API
-driver lives in main() with heavy imports inside, mirroring eval/run_eval.py so this
+driver lives in main() with heavy imports inside, mirroring be/eval/run_eval.py so this
 module imports cheaply for unit tests.
 """
 import argparse, json, re
