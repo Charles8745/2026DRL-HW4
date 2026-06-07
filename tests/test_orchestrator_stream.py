@@ -263,9 +263,9 @@ def test_observer_mutating_payload_does_not_corrupt_trace_or_slots():
     receives must NOT reach back into the live trace rows or memory slots. NOTE this
     proves *projection independence* — the SSE payloads (e.g. tool_result's
     result_summary) are freshly-built whitelisted views structurally disjoint from the
-    trace, so vandalism has nothing live to alias. It does NOT, on its own, exercise
-    _emit's deepcopy line; the dedicated coverage for that aliasing mechanism is
-    test_emit_hands_out_deepcopied_payload_not_live_alias below."""
+    trace, so vandalism has nothing live to alias. The complementary boundary check
+    that _emit hands out a fresh top-level dict (not the live source) is
+    test_emit_hands_out_a_fresh_top_level_view_not_the_live_source below."""
     o = _orch([
         LLMResponse(text="推薦30萬sport", total_tokens=2),
         LLMResponse(text="找車推薦", total_tokens=1),
@@ -292,14 +292,15 @@ def test_observer_mutating_payload_does_not_corrupt_trace_or_slots():
     assert viewed and "asking_price" in viewed[0] and "specs" in viewed[0]
 
 
-def test_emit_hands_out_deepcopied_payload_not_live_alias():
-    """Targeted coverage for _emit's copy.deepcopy line (orchestrator.py): _emit must
-    hand the observer a deep copy, never an alias of the source dict. This is what the
-    end-to-end vandal test above CANNOT prove (its SSE payloads are disjoint
-    projections). Here the observer mutates a payload that literally shares nested
-    structure with a live source dict; without the deepcopy the source would be
-    corrupted and payload would be the same object. Removing copy.deepcopy at
-    orchestrator.py _emit makes BOTH assertions below fail."""
+def test_emit_hands_out_a_fresh_top_level_view_not_the_live_source():
+    """_emit's read-only contract at the boundary: the observer is handed a NEW dict,
+    never the live source object, so mutating its payload cannot reach back into the
+    source. NOTE: for JSON-shaped payloads (dict/list/str/number — i.e. everything
+    process() actually emits) _scrub already rebuilds the whole tree via comprehensions,
+    so these assertions hold from _scrub alone; the copy.deepcopy in _emit is a
+    belt-and-braces guard for any value type _scrub passes through unchanged and is NOT
+    isolated by this test. This proves only 'scrub yields a fresh top-level view',
+    which is the real, testable behavior over the payloads emitted in practice."""
     o = _orch([])
     source = {"trace": {"steps": [{"tool_result": {"data": [{"asking_price": 1, "specs": {}}]}}]}}
     snapshot = copy.deepcopy(source)
@@ -307,14 +308,15 @@ def test_emit_hands_out_deepcopied_payload_not_live_alias():
 
     def vandal(et, d):
         captured["payload"] = d
-        # deep-mutate the nested structure we were handed
+        # vandalize the top-level dict we were handed
         d.clear()
         d["HACKED"] = True
 
     o._emit(vandal, "final", source)
-    # 1) _emit handed out a DISTINCT object, not the live source dict (the deepcopy)
+    # 1) _emit handed out a DISTINCT top-level object, not the live source dict
+    #    (scrub rebuilds the dict; the deepcopy reinforces this for non-JSON values)
     assert captured["payload"] is not source
-    # 2) the live source (and its nested rows) survive the observer's vandalism intact
+    # 2) the live source survives the observer's top-level vandalism intact
     assert source == snapshot
 
 
