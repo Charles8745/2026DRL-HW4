@@ -1,20 +1,83 @@
 <!doctype html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="utf-8"><title>RideButler 二手重機客服</title>
+  <meta charset="utf-8">
+  <title>RideButler 騎士管家 · 二手重機智慧客服</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="/static/style.css">
+
+  <!-- self-hosted font preload (files optional; swap falls back to system stack) -->
+  <link rel="preload" href="/static/fonts/Fraunces.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/static/fonts/NotoSansTC-subset.woff2" as="font" type="font/woff2" crossorigin>
+
+  <link rel="stylesheet" href="/static/css/tokens.css">
+  <link rel="stylesheet" href="/static/css/base.css">
+  <link rel="stylesheet" href="/static/css/layout.css">
 </head>
 <body>
-  <div class="layout">
-    <section class="chat">
-      <header>🏍️ RideButler 騎士管家</header>
-      <div id="messages"></div>
-      <form id="composer"><input id="input" autocomplete="off"
-        placeholder="例如：30萬內想要 Yamaha 跑車"><button>送出</button></form>
-    </section>
-    <aside class="trace"><h3>Decision Trace</h3><pre id="trace">—</pre></aside>
+  <!-- BYOK gate: forced modal unless a key is in sessionStorage or demo mode -->
+  <dialog data-byok class="byok" aria-labelledby="byok-title">
+    <div data-byok-card class="byok__card">
+      <h2 id="byok-title">輸入你的 OpenAI 金鑰</h2>
+      <p class="byok__lede">RideButler 採自帶金鑰（BYOK）。金鑰只保存在這個瀏覽器分頁，送出後即從欄位清除。</p>
+      <form data-byok-form class="byok__form">
+        <label class="byok__label" for="byok-input">OpenAI API 金鑰</label>
+        <input data-byok-input id="byok-input" type="password" autocomplete="off"
+               spellcheck="false" placeholder="sk-..." class="byok__input">
+        <p data-byok-error class="byok__error" hidden></p>
+        <button type="submit" class="byok__submit">開始使用</button>
+      </form>
+      <p class="byok__hint">
+        <span>記住於此瀏覽器分頁</span> ·
+        <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">如何取得金鑰</a>
+      </p>
+    </div>
+  </dialog>
+
+  <!-- demo-mode amber banner (hidden unless cfg.demo_mode) -->
+  <div data-demo-banner class="demo-banner" hidden>展示模式：使用伺服器示範金鑰，功能與額度受限。</div>
+
+  <div id="app" data-view="landing" data-panel="open">
+    <!-- LEFT: IconRail (deep green, gold monogram, aria-labels, key-status dot; no favorites button — viewed_listings is overwrite, not favorites) -->
+    <nav class="rail" data-key-state data-key="demo" aria-label="主導覽">
+      <div class="rail__brand" aria-hidden="true">RB</div>
+      <button class="rail__btn" type="button" data-action="new"     aria-label="新對話">＋</button>
+      <button class="rail__btn" type="button" data-action="chat"    aria-label="對話" aria-pressed="true">💬</button>
+      <button class="rail__btn" type="button" data-action="panel"   aria-label="切換管線面板" aria-pressed="true">📊</button>
+      <button class="rail__btn" type="button" data-action="help"    aria-label="說明">？</button>
+      <div class="rail__spacer"></div>
+      <button class="rail__btn" type="button" data-action="reset-key" aria-label="重設金鑰">🔑</button>
+      <span class="rail__keydot" data-key-dot aria-hidden="true"></span>
+    </nav>
+
+    <!-- CENTER: landing stub + chat log container -->
+    <main class="center">
+      <!-- landing view (full hero + FLIP morph arrive in M5) -->
+      <section class="view-landing" aria-label="首頁">
+        <div class="landing__hero">
+          <h1 class="landing__wordmark">RideButler</h1>
+          <p class="landing__sub">騎士管家 · 二手重機智慧客服</p>
+        </div>
+      </section>
+
+      <!-- chat view (ChatLog + ListingCard deck render in M4) -->
+      <section class="view-chat" aria-label="對話">
+        <div data-chatlog class="chatlog" aria-live="polite"></div>
+      </section>
+
+      <!-- composer is shared by landing pill (M5) and chat view -->
+      <form data-composer class="composer">
+        <input data-composer-input class="composer__input" autocomplete="off"
+               placeholder="例如：30萬內想要 Yamaha 跑車">
+        <button type="submit" class="composer__send" aria-label="送出">送出</button>
+      </form>
+    </main>
+
+    <!-- RIGHT: PipelinePanel (stepper renders in M4) -->
+    <aside class="panel" aria-label="決策管線">
+      <div data-pipeline class="pipeline"></div>
+    </aside>
   </div>
-  <script src="/static/app.js"></script>
+
+  <script type="module" src="/static/js/main.js"></script>
 </body>
 </html>
