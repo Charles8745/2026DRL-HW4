@@ -395,3 +395,27 @@ def test_concurrent_confirm_does_not_double_execute(monkeypatch):
     # exactly ONE booking created (no double-execute), both requests answered
     assert len(store.orders) == n0 + 1
     assert results.count(200) == 2
+
+
+# --- append to tests/test_app_sse.py ---
+import logging
+
+
+def test_logging_filter_redacts_generic_sk_keys(monkeypatch, caplog):
+    # creating the app installs a process-level redaction filter on the root logger
+    create_app(None, memory=_SS(), corpus_cache=object())
+    logger = logging.getLogger("rb.test")
+    with caplog.at_level(logging.INFO):
+        logger.info("leaked token sk-LEAKCANARYabcdefghijklmnop in a log line")
+    text = caplog.text
+    assert "sk-LEAKCANARY" not in text
+    assert "sk-***REDACTED***" in text
+
+
+def test_logging_filter_is_idempotent_not_double_installed(monkeypatch):
+    import fe.app as appmod
+    create_app(None, memory=_SS(), corpus_cache=object())
+    create_app(None, memory=_SS(), corpus_cache=object())
+    root = logging.getLogger()
+    n = sum(1 for f in root.filters if isinstance(f, appmod._RedactFilter))
+    assert n == 1  # installed once, not duplicated per create_app

@@ -1,10 +1,11 @@
 # fe/app.py
+import logging
 import secrets
 import threading
 
 import config
 from flask import Flask, request, jsonify, render_template
-from fe.keyauth import extract_request_key, validate_key_format, build_request_orchestrator
+from fe.keyauth import extract_request_key, validate_key_format, build_request_orchestrator, redact_key
 
 _KEYLIKE_BODY_FIELDS = ("api_key", "apikey", "openai_key", "authorization", "x-ridebutler-key")
 
@@ -51,6 +52,42 @@ class _SessionGuard:
 _SESSION_GUARD = _SessionGuard()
 
 
+class _RedactFilter(logging.Filter):
+    """Process-level filter: run generic redact_key over every LogRecord's rendered
+    message so an accidental key in any log line becomes sk-***REDACTED*** (R6)."""
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            msg = record.getMessage()
+            red = redact_key(msg, None)   # generic sk-... branch
+            if red != msg:
+                record.msg = red
+                record.args = ()
+        except Exception:
+            pass
+        return True
+
+
+def _install_redact_filter():
+    """Install the redaction once (idempotent). A logging.Filter on the root logger
+    is the install marker AND redacts records emitted directly on root; a LogRecord
+    factory applies the same redaction to records from *any* logger (root-logger
+    filters are not consulted when a child logger propagates a record), so R6 holds
+    for every LogRecord regardless of which logger produced it."""
+    root = logging.getLogger()
+    if any(isinstance(f, _RedactFilter) for f in root.filters):
+        return
+    rf = _RedactFilter()
+    root.addFilter(rf)
+    inner = logging.getLogRecordFactory()
+
+    def _redacting_factory(*args, **kwargs):
+        record = inner(*args, **kwargs)
+        rf.filter(record)
+        return record
+
+    logging.setLogRecordFactory(_redacting_factory)
+
+
 def _strip_keylike(body: dict) -> dict:
     """Drop any api_key/authorization-shaped field from the request body BEFORE
     it reaches process() (header-only key channel; R4)."""
@@ -76,6 +113,7 @@ def _resolve_key(req):
 
 def create_app(orchestrator=None, *, memory=None, corpus_cache=None):
     app = Flask(__name__)
+    _install_redact_filter()
     app.config["ORCH"] = orchestrator          # legacy single-orch mode (frozen test_app.py)
     app.config["MEMORY"] = memory              # BYOK shared SessionStore
     app.config["CORPUS_CACHE"] = corpus_cache  # BYOK process-level CorpusEmbeddingCache
