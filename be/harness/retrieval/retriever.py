@@ -55,19 +55,28 @@ class HybridRetriever:
         self.last_trace: dict = {"dense_skipped": False, "rerank_skipped": False}
 
     def retrieve(self, query: str, k: int = FINAL_K,
-                 use_dense: bool = True, use_rerank: bool = True) -> list[dict]:
+                 use_dense: bool = True, use_rerank: bool = True,
+                 on_substep=None) -> list[dict]:
         trace = {"dense_skipped": False, "rerank_skipped": False}
-        lists = [(self.bm25.search(query), True)]
+        bm25_ranked = self.bm25.search(query)
+        lists = [(bm25_ranked, True)]
+        self._sub(on_substep, "bm25", False, bm25_ranked, k)   # snapshot already-computed bm25
+        dense_ranked = []
         if use_dense:
             if self.vstore is None:
                 trace["dense_skipped"] = True
             else:
                 try:
                     qvec = self.embedder.embed([query])[0]
-                    lists.append((self.vstore.query(qvec, top_n=len(self.catalog)), False))
+                    dense_ranked = self.vstore.query(qvec, top_n=len(self.catalog))
+                    lists.append((dense_ranked, False))
                 except Exception:
                     trace["dense_skipped"] = True
+                    dense_ranked = []
+        self._sub(on_substep, "vector", trace["dense_skipped"], dense_ranked, k)
         candidates = _rrf(lists)[:CANDIDATE_N]
+        self._sub(on_substep, "rrf", False, [(t, None) for t in candidates], k)  # rrf doc_ids (no score)
+        rerank_skipped = not (use_rerank and len(candidates) > 1)
         if use_rerank and len(candidates) > 1:
             cand_objs = [{"doc_id": t, "title": t,
                           "snippet": _snippet(self._by_title[t]["description"])}
@@ -76,6 +85,8 @@ class HybridRetriever:
                 candidates = self.reranker.rerank(query, cand_objs)
             except Exception:
                 trace["rerank_skipped"] = True
+                rerank_skipped = True
+        self._sub(on_substep, "rerank", rerank_skipped, [(t, None) for t in candidates], k)
         self.last_trace = trace
         out = []
         for rank, t in enumerate(candidates[:k]):
@@ -85,3 +96,16 @@ class HybridRetriever:
                         "snippet": _snippet(c["description"]),
                         "retrieval_rank": rank})
         return out
+
+    def _sub(self, on_substep, phase: str, skipped: bool, ranked, k: int) -> None:
+        """Read-only `retrieval` substep snapshot of an ALREADY-computed ranked list.
+        `ranked` = [(doc_id, score|None)]. Never recompute / re-rank / re-slice the
+        pipeline; only a bounded `top` projection for display. Observer is isolated."""
+        if on_substep is None:
+            return
+        top = [{"title": t, "score": s, "rank": i}
+               for i, (t, s) in enumerate(ranked[:k])]
+        try:
+            on_substep("retrieval", {"phase": phase, "skipped": skipped, "top": top, "k": k})
+        except Exception:
+            pass
