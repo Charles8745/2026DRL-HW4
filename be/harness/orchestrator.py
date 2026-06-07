@@ -1,3 +1,7 @@
+import copy
+import re
+from typing import Callable
+
 import config
 from be.harness.governance import check_input, is_affirmative, TurnBudget
 from be.harness.tools import TOOL_FUNCS
@@ -8,17 +12,51 @@ from be.harness.prompts import FALLBACK_SYS
 
 _BOOKING_CUES = ("約看車", "預約看車", "幫我約", "約看")
 
+OnStep = Callable[[str, dict], None]          # on_step(event_type, data) -> None
+
+# api_key / Authorization-shaped keys are dropped; sk-... literals are masked.
+_SECRET_KEYS = ("api_key", "apikey", "authorization", "openai_key", "openai_api_key", "x-ridebutler-key")
+_SK_RE = re.compile(r"sk-[A-Za-z0-9_-]{20,}")
+
+
+def _scrub(data):
+    """Read-only deep-scrub: drop api_key/Authorization-shaped keys at any depth
+    and mask sk-... literals in strings. Operates on an already-deepcopied value."""
+    if isinstance(data, dict):
+        return {k: _scrub(v) for k, v in data.items()
+                if k.lower() not in _SECRET_KEYS}
+    if isinstance(data, list):
+        return [_scrub(v) for v in data]
+    if isinstance(data, str):
+        return _SK_RE.sub("sk-***REDACTED***", data)
+    return data
+
 class Orchestrator:
     def __init__(self, llm, store, memory):
         self.llm, self.store, self.memory = llm, store, memory
 
-    def process(self, sid: str, user_input: str) -> dict:
+    def _emit(self, on_step, etype: str, data: dict) -> None:
+        if on_step is None:
+            return                                  # hard no-op == today's bits
+        payload = _scrub(copy.deepcopy(data))       # read-only deepcopy + key scrub
+        try:
+            on_step(etype, payload)                 # observer isolation: swallow all
+        except Exception:
+            pass
+
+    def process(self, sid: str, user_input: str, on_step: "OnStep | None" = None) -> dict:
         # 0) input guard
         guard = check_input(user_input)
         if guard["blocked"]:
             reply = "您的訊息疑似異常指令，已忽略。請描述您的購車或訂單需求。"
             self.memory.append_message(sid, "assistant", reply)
-            return {"reply": reply, "blocked": True, "awaiting_confirmation": False, "trace": {}}
+            ret = {"reply": reply, "blocked": True, "awaiting_confirmation": False, "trace": {}}
+            self._emit(on_step, "guard", {"blocked": True, "reason": guard["reason"]})
+            self._emit(on_step, "final", {"reply": reply, "blocked": True, "awaiting_confirmation": False,
+                                          "router_label": None, "resolved_listing_id": None,
+                                          "tokens": 0, "trace": ret["trace"]})
+            return ret
+        self._emit(on_step, "guard", {"blocked": False, "reason": None})
 
         # 1) pending confirmation? (no LLM needed)
         slots = self.memory.get(sid)["slots"]
@@ -29,19 +67,36 @@ class Orchestrator:
                 result = TOOL_FUNCS[pending["tool_name"]](self.store, **pending["args"])
                 reply = ("已為您完成預約。" if result["ok"] else f"執行失敗：{result['error']}")
                 self.memory.append_message(sid, "assistant", reply)
-                return {"reply": reply, "blocked": False, "awaiting_confirmation": False,
-                        "trace": {"confirmation": "executed", "tool_result": result}}
+                ret = {"reply": reply, "blocked": False, "awaiting_confirmation": False,
+                       "trace": {"confirmation": "executed", "tool_result": result}}
+                self._emit(on_step, "confirm_gate",
+                           {"tool_name": pending["tool_name"], "args": pending["args"],
+                            "stage": "executed", "tool_result": {"ok": result["ok"], "error": result["error"]}})
+                self._emit(on_step, "final", {"reply": reply, "blocked": False, "awaiting_confirmation": False,
+                                              "router_label": None, "resolved_listing_id": None,
+                                              "tokens": 0, "trace": ret["trace"]})
+                return ret
             self.memory.append_message(sid, "assistant", "好的，已取消該操作。")
-            return {"reply": "好的，已取消該操作。", "blocked": False,
-                    "awaiting_confirmation": False, "trace": {"confirmation": "cancelled"}}
+            ret = {"reply": "好的，已取消該操作。", "blocked": False,
+                   "awaiting_confirmation": False, "trace": {"confirmation": "cancelled"}}
+            self._emit(on_step, "confirm_gate",
+                       {"tool_name": pending["tool_name"], "args": pending["args"], "stage": "cancelled"})
+            self._emit(on_step, "final", {"reply": ret["reply"], "blocked": False, "awaiting_confirmation": False,
+                                          "router_label": None, "resolved_listing_id": None,
+                                          "tokens": 0, "trace": ret["trace"]})
+            return ret
 
         self.memory.append_message(sid, "user", user_input)
 
         # 2) rewrite -> route
         rw = rewrite(self.llm, self.memory, sid, user_input)
+        self._emit(on_step, "rewrite", {"rewritten_query": rw["rewritten_query"],
+                                        "resolved_listing_id": rw["resolved_listing_id"],
+                                        "tokens": rw["tokens"]})
         rt = route(self.llm, rw["rewritten_query"])
         tokens = rw["tokens"] + rt["tokens"]
         label = rt["label"]
+        self._emit(on_step, "route", {"label": label, "tokens": rt["tokens"]})
 
         # multi-intent: defer a secondary booking intent until a vehicle is chosen
         if label in ("找車推薦", "規格比較") and any(c in user_input for c in _BOOKING_CUES):
@@ -53,16 +108,27 @@ class Orchestrator:
             tokens += resp.total_tokens
             reply = resp.text or "我是二手重機客服，可協助找車、比規格、查訂單與售後。"
             self.memory.append_message(sid, "assistant", reply)
-            return {"reply": reply, "blocked": False, "awaiting_confirmation": False,
-                    "trace": {"raw_input": user_input, "rewritten_query": rw["rewritten_query"],
-                              "router_label": label, "resolved_listing_id": rw["resolved_listing_id"],
-                              "steps": [], "tokens": tokens}}
+            ret = {"reply": reply, "blocked": False, "awaiting_confirmation": False,
+                   "trace": {"raw_input": user_input, "rewritten_query": rw["rewritten_query"],
+                             "router_label": label, "resolved_listing_id": rw["resolved_listing_id"],
+                             "steps": [], "tokens": tokens}}
+            self._emit(on_step, "fallback", {"reply_preview": reply[:80]})
+            self._emit(on_step, "memory", {"viewed_count": len(slots.get("viewed_listings") or []),
+                                           "slots": {"budget": slots.get("budget"),
+                                                     "brand_pref": slots.get("brand_pref"),
+                                                     "usage": slots.get("usage"),
+                                                     "pending_intent": slots.get("pending_intent")}})
+            self._emit(on_step, "final", {"reply": reply, "blocked": False, "awaiting_confirmation": False,
+                                          "router_label": label, "resolved_listing_id": rw["resolved_listing_id"],
+                                          "tokens": tokens, "trace": ret["trace"]})
+            return ret
 
         # 4) domain handler — inject the deterministically-resolved listing id (ordinal reference)
         handler_query = rw["rewritten_query"]
         if rw["resolved_listing_id"]:
             handler_query += f"（指定 listing_id={rw['resolved_listing_id']}）"
-        out = run_handler(self.llm, self.store, label, handler_query, TurnBudget(config.MAX_TOOL_CALLS_PER_TURN))
+        out = run_handler(self.llm, self.store, label, handler_query,
+                          TurnBudget(config.MAX_TOOL_CALLS_PER_TURN), on_step=on_step)
         tokens += out["tokens"]
 
         # remember viewed listings (ordinal resolution); auto-fill preference slots from tool args
@@ -83,6 +149,9 @@ class Orchestrator:
                           "proposed": True})
             slots["pending_action"] = out["pending_action"]
             awaiting = True
+            self._emit(on_step, "confirm_gate",
+                       {"tool_name": out["pending_action"]["tool_name"],
+                        "args": out["pending_action"]["args"], "stage": "proposed"})
         else:
             awaiting = False
 
@@ -94,7 +163,16 @@ class Orchestrator:
             reply += "\n（選定車輛後，我可以再為您預約看車。）"
 
         self.memory.append_message(sid, "assistant", reply)
-        return {"reply": reply, "blocked": False, "awaiting_confirmation": awaiting,
-                "trace": {"raw_input": user_input, "rewritten_query": rw["rewritten_query"],
-                          "router_label": label, "resolved_listing_id": rw["resolved_listing_id"],
-                          "steps": steps, "tokens": tokens}}
+        ret = {"reply": reply, "blocked": False, "awaiting_confirmation": awaiting,
+               "trace": {"raw_input": user_input, "rewritten_query": rw["rewritten_query"],
+                         "router_label": label, "resolved_listing_id": rw["resolved_listing_id"],
+                         "steps": steps, "tokens": tokens}}
+        self._emit(on_step, "memory", {"viewed_count": len(slots.get("viewed_listings") or []),
+                                       "slots": {"budget": slots.get("budget"),
+                                                 "brand_pref": slots.get("brand_pref"),
+                                                 "usage": slots.get("usage"),
+                                                 "pending_intent": slots.get("pending_intent")}})
+        self._emit(on_step, "final", {"reply": reply, "blocked": False, "awaiting_confirmation": awaiting,
+                                      "router_label": label, "resolved_listing_id": rw["resolved_listing_id"],
+                                      "tokens": tokens, "trace": ret["trace"]})
+        return ret

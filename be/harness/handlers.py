@@ -5,7 +5,7 @@ from be.harness.prompts import handler_sys
 def _confirm_summary(name, args):
     return f"要為您執行「{name}」（參數：{json.dumps(args, ensure_ascii=False)}），確認嗎？"
 
-def run_handler(llm, store, domain, query, budget) -> dict:
+def run_handler(llm, store, domain, query, budget, on_step=None) -> dict:
     schemas = schemas_for(domain)
     messages = [{"role": "user", "content": query}]
     trace, tokens = [], 0
