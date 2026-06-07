@@ -1,0 +1,26 @@
+# Render deployment — single instance, BYOK only.
+# IMPORTANT: do NOT add OPENAI_API_KEY here. Production = bring-your-own-key;
+# keys arrive per-request via the X-RideButler-Key header.
+services:
+  - type: web
+    name: ridebutler
+    runtime: docker
+    plan: free
+    numInstances: 1          # single instance: process-memory state must not split
+    healthCheckPath: /
+    dockerfilePath: ./Dockerfile
+    autoDeploy: false
+    envVars:
+      - key: DEMO_MODE
+        value: "0"
+      - key: ALLOW_ENV_KEY
+        value: "0"
+      - key: ALLOW_ENV_KEY_PUBLIC
+        value: "0"
+      - key: OPENAI_MODEL
+        value: gpt-4.1-mini
+      - key: OPENAI_EMBED_MODEL
+        value: text-embedding-3-small
+      - key: GUNICORN_THREADS
+        value: "8"
+      # OPENAI_API_KEY intentionally ABSENT — never set on a public host.
