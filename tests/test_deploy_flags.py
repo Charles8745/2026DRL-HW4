@@ -188,3 +188,51 @@ def test_wsgi_is_byok_mode(monkeypatch):
     import wsgi
     importlib.reload(wsgi)
     assert wsgi.app.config["ORCH"] is None
+
+
+# ---- gunicorn.conf.py: SSE-safe single-instance hard clamp (R10/R11) -------
+
+def _load_gunicorn_conf(monkeypatch, **env):
+    import importlib.util
+    import os
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "gunicorn.conf.py"))
+    spec = importlib.util.spec_from_file_location("gunicorn_conf_under_test", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_gunicorn_worker_class_is_gthread(monkeypatch):
+    mod = _load_gunicorn_conf(monkeypatch)
+    assert mod.worker_class == "gthread"   # sync would buffer SSE (R10)
+
+
+def test_gunicorn_workers_hard_clamped_to_one(monkeypatch):
+    # Platform tries to override with WEB_CONCURRENCY=4; config must force 1.
+    mod = _load_gunicorn_conf(monkeypatch, WEB_CONCURRENCY="4")
+    assert mod.workers == 1
+
+
+def test_gunicorn_timeouts_are_sse_safe(monkeypatch):
+    mod = _load_gunicorn_conf(monkeypatch)
+    assert mod.timeout == 120
+    assert mod.graceful_timeout == 30
+    assert mod.keepalive == 5
+
+
+def test_gunicorn_threads_from_env(monkeypatch):
+    mod = _load_gunicorn_conf(monkeypatch, GUNICORN_THREADS="16")
+    assert mod.threads == 16
+
+
+def test_gunicorn_on_starting_rejects_multi_worker(monkeypatch):
+    mod = _load_gunicorn_conf(monkeypatch)
+
+    class _FakeServer:
+        class cfg:
+            workers = 4   # platform forced >1 past the module-level clamp
+    import pytest
+    with pytest.raises(SystemExit):
+        mod.on_starting(_FakeServer())
