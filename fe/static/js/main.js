@@ -27,6 +27,8 @@ function wireComposer(appEl, gate, sse) {
   const form  = document.querySelector('[data-composer]');
   const input = document.querySelector('[data-composer-input]');
   if (!form || !input) return;
+  if (form.dataset.bound === '1') return;        // idempotent: bind submit exactly once
+  form.dataset.bound = '1';                       // even if onReady fires again after a 401 re-entry
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
