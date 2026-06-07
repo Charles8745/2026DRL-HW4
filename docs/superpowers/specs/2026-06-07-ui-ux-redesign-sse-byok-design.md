@@ -82,7 +82,7 @@ def _emit(self, on_step, etype: str, data: dict) -> None:
     except Exception:
         pass
 ```
-emit 點（嚴格在既有回傳值算完之後）：`guard` →（`confirmation_resume`）→ `rewrite` → `route` →（`fallback`）→ `memory` → `final`；`done`/`error` 由 StreamRunner 補。
+emit 點（嚴格在既有回傳值算完之後）：`guard` →（`confirm_gate(stage=executed|cancelled)`，pending 路徑）→ `rewrite` → `route` →（`fallback`）→ `memory` → `final`；`done`/`error` 由 StreamRunner 補。（pending 確認/取消與 domain 路徑的兩階段確認**共用同一個 `confirm_gate` 事件**，以 `stage` 區分 proposed/executed/cancelled，使前端維持單一 gate 節點。）
 
 **`be/harness/handlers.py`**：`run_handler(llm, store, domain, query, budget, on_step=None)`（最後一參）。執行 `TOOL_FUNCS[call.name](...)` 前 emit `tool_call`、後 emit `tool_result`；CONFIRM_REQUIRED 短路時 emit `tool_call` + `proposed` result。
 
@@ -226,7 +226,7 @@ fe/static/img/bikes/             車卡本地圖（使用者放幾張常見車�
 
 ### 4.2 四條路徑的事件序列（逐行對照 orchestrator.py）
 - **BLOCKED**（trace={}）：`guard(blocked)` → `final` → `done`（0 LLM call）
-- **PENDING-確認/取消**（無 LLM）：`confirmation_resume(executed|cancelled)` → `final` → `done`
+- **PENDING-確認/取消**（無 LLM）：`confirm_gate(stage=executed|cancelled)` → `final` → `done`
 - **FALLBACK**（steps=[]）：`guard` → `rewrite` → `route` → `fallback` → `memory` → `done`
 - **DOMAIN tool-loop**：`guard` → `rewrite` → `route` → [`tool_call`(+`retrieval` 若 semantic)]×N →（`confirm_gate(proposed)` 若 CONFIRM_REQUIRED）→ `memory` → `done(awaiting?)`
 
