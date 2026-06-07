@@ -1,0 +1,61 @@
+/* fe/static/css/byok.css — BYOK gate dialog chrome + shake.
+   Tokens only (no bare hex). Shake is gated by prefers-reduced-motion. */
+dialog.byok {
+  border: none;
+  border-radius: var(--r-lg);
+  padding: 0;
+  background: transparent;
+  z-index: var(--z-dialog);
+}
+dialog.byok::backdrop {
+  background: rgba(26, 31, 28, .55);
+  backdrop-filter: blur(2px);
+}
+.byok__card {
+  background: var(--c-surface);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-pop);
+  padding: var(--sp-6);
+  width: min(92vw, 420px);
+}
+.byok__card h2 {
+  font-family: var(--ff-display);
+  font-size: var(--fs-h3);
+  margin-bottom: var(--sp-2);
+}
+.byok__lede { color: var(--c-ink-soft); font-size: var(--fs-sm); margin-bottom: var(--sp-4); }
+.byok__form { display: flex; flex-direction: column; gap: var(--sp-2); }
+.byok__label { font-size: var(--fs-xs); color: var(--c-ink-soft); }
+.byok__input {
+  font-family: var(--ff-mono);
+  padding: var(--sp-3);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  background: var(--c-surface-2);
+}
+.byok__input:focus-visible { border-color: var(--c-green); outline: none; }
+.byok__error { color: var(--c-danger); font-size: var(--fs-sm); }
+.byok__submit {
+  margin-top: var(--sp-2);
+  background: var(--c-green);
+  color: var(--c-on-green);
+  border: none;
+  border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-4);
+  font-weight: 600;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.byok__submit:hover { background: var(--c-green-700); }
+.byok__hint { margin-top: var(--sp-4); font-size: var(--fs-xs); color: var(--c-ink-faint); }
+
+@keyframes byok-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-5px); }
+  80% { transform: translateX(5px); }
+}
+.byok__card.shake { animation: byok-shake var(--dur) var(--ease-out); }
+@media (prefers-reduced-motion: reduce) {
+  .byok__card.shake { animation: none; }
+}
