@@ -1,6 +1,8 @@
 import re
 
-_INJECTION = ["忽略前述", "ignore previous", "system prompt", "洩漏", "reveal your"]
+_INJECTION = ["忽略前述", "ignore previous", "ignore all previous", "system prompt",
+              "系統提示", "系統指令", "洩漏", "reveal your", "開發者模式", "developer mode",
+              "印出上面", "印出你的", "repeat the above", "隱藏指令", "無視所有", "無視先前"]
 _AFFIRM = ["好", "確認", "對", "是的", "ok", "yes", "沒問題", "可以"]
 _NEGATE = ["不要", "先不", "取消", "no", "不用"]
 
