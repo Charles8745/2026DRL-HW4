@@ -40,7 +40,7 @@ class HybridRetriever:
     RRF, then optional LLM listwise rerank. retrieve() returns ranked model dicts;
     listing expansion lives in the semantic_search tool."""
 
-    def __init__(self, catalog: list[dict], embedder, reranker):
+    def __init__(self, catalog: list[dict], embedder, reranker, *, vstore=None):
         self.catalog = catalog
         self._by_title = {c["title"]: c for c in catalog}
         self.embedder = embedder
@@ -48,10 +48,13 @@ class HybridRetriever:
         doc_ids = [c["title"] for c in catalog]
         texts = [_doc_text(c) for c in catalog]
         self.bm25 = BM25Index(doc_ids, texts)
-        try:
-            self.vstore = VectorStore(doc_ids, embedder.embed(texts))  # build-time embed
-        except Exception:
-            self.vstore = None   # dense unavailable (API down) -> retrieve() degrades to BM25-only
+        if vstore is not None:
+            self.vstore = vstore   # reuse cached VectorStore -> SKIP build-time embed
+        else:
+            try:
+                self.vstore = VectorStore(doc_ids, embedder.embed(texts))  # build-time embed
+            except Exception:
+                self.vstore = None   # dense unavailable (API down) -> retrieve() degrades to BM25-only
         self.last_trace: dict = {"dense_skipped": False, "rerank_skipped": False}
 
     def retrieve(self, query: str, k: int = FINAL_K,

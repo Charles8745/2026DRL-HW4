@@ -30,3 +30,43 @@ def test_flags_falsey_strings(monkeypatch):
     cfg = _reload_config(monkeypatch, ALLOW_ENV_KEY="0", DEMO_MODE="false")
     assert cfg.ALLOW_ENV_KEY is False
     assert cfg.DEMO_MODE is False
+
+
+from be.harness.retrieval.retriever import HybridRetriever
+from be.harness.retrieval.vectorstore import VectorStore
+from be.harness.embedder import FakeEmbedder
+from be.harness.reranker import FakeReranker
+
+
+_MINI_CATALOG = [
+    {"title": "A", "brand": "X", "usage": "naked", "description": "通勤 街車"},
+    {"title": "B", "brand": "Y", "usage": "sport", "description": "賽道 仿賽"},
+]
+
+
+class _SpyEmbedder(FakeEmbedder):
+    def __init__(self, dim=64):
+        super().__init__(dim)
+        self.calls = 0
+
+    def embed(self, texts):
+        self.calls += 1
+        return super().embed(texts)
+
+
+def test_vstore_kwarg_skips_build_embed():
+    emb = _SpyEmbedder()
+    pre = FakeEmbedder().embed(["A｜X｜naked｜通勤 街車", "B｜Y｜sport｜賽道 仿賽"])
+    vs = VectorStore(["A", "B"], pre)
+    r = HybridRetriever(_MINI_CATALOG, emb, FakeReranker(), vstore=vs)
+    assert r.vstore is vs           # reused, not rebuilt
+    assert emb.calls == 0           # no build-time embed
+
+
+def test_no_vstore_kwarg_behaves_like_today():
+    emb = _SpyEmbedder()
+    r = HybridRetriever(_MINI_CATALOG, emb, FakeReranker())
+    assert emb.calls == 1           # build-time embed happened (today's behavior)
+    assert isinstance(r.vstore, VectorStore)
+    out = r.retrieve("通勤", k=2)
+    assert isinstance(out, list) and len(out) >= 1
