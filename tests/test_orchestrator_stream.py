@@ -259,8 +259,13 @@ def test_observer_raises_does_not_change_return():
 
 
 def test_observer_mutating_payload_does_not_corrupt_trace_or_slots():
-    """Mutating the payload an observer receives must NOT reach back into the live
-    trace rows or memory slots (deepcopy+scrub isolation)."""
+    """End-to-end read-only contract: an observer that vandalizes every payload it
+    receives must NOT reach back into the live trace rows or memory slots. NOTE this
+    proves *projection independence* — the SSE payloads (e.g. tool_result's
+    result_summary) are freshly-built whitelisted views structurally disjoint from the
+    trace, so vandalism has nothing live to alias. It does NOT, on its own, exercise
+    _emit's deepcopy line; the dedicated coverage for that aliasing mechanism is
+    test_emit_hands_out_deepcopied_payload_not_live_alias below."""
     o = _orch([
         LLMResponse(text="推薦30萬sport", total_tokens=2),
         LLMResponse(text="找車推薦", total_tokens=1),
@@ -285,6 +290,32 @@ def test_observer_mutating_payload_does_not_corrupt_trace_or_slots():
     # 2) viewed_listings retain full dicts (not the whitelisted memory-event subset)
     viewed = o.memory.get(sid)["slots"]["viewed_listings"]
     assert viewed and "asking_price" in viewed[0] and "specs" in viewed[0]
+
+
+def test_emit_hands_out_deepcopied_payload_not_live_alias():
+    """Targeted coverage for _emit's copy.deepcopy line (orchestrator.py): _emit must
+    hand the observer a deep copy, never an alias of the source dict. This is what the
+    end-to-end vandal test above CANNOT prove (its SSE payloads are disjoint
+    projections). Here the observer mutates a payload that literally shares nested
+    structure with a live source dict; without the deepcopy the source would be
+    corrupted and payload would be the same object. Removing copy.deepcopy at
+    orchestrator.py _emit makes BOTH assertions below fail."""
+    o = _orch([])
+    source = {"trace": {"steps": [{"tool_result": {"data": [{"asking_price": 1, "specs": {}}]}}]}}
+    snapshot = copy.deepcopy(source)
+    captured = {}
+
+    def vandal(et, d):
+        captured["payload"] = d
+        # deep-mutate the nested structure we were handed
+        d.clear()
+        d["HACKED"] = True
+
+    o._emit(vandal, "final", source)
+    # 1) _emit handed out a DISTINCT object, not the live source dict (the deepcopy)
+    assert captured["payload"] is not source
+    # 2) the live source (and its nested rows) survive the observer's vandalism intact
+    assert source == snapshot
 
 
 def test_recommend_data_deep_equal_to_none_version():
