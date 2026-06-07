@@ -9,12 +9,13 @@ async function main() {
   const dialogEl = document.querySelector('[data-byok]');
 
   // 1) load runtime config (demo flag + media map for listing cards in M4)
-  let cfg = { demo_mode: false, media: {} };
+  //    NOTE: /api/config returns { demo: bool, ... } — read `cfg.demo`.
+  let cfg = { demo: false, media: {} };
   const probe = new ApiClient(() => { try { return sessionStorage.getItem('rb_key'); } catch { return null; } });
   try { cfg = await probe.loadConfig(); } catch { /* config optional at boot */ }
 
   // 2) BYOK gate; key getter is the single source ApiClient reads each request
-  const gate = new ByokGate(dialogEl, { demoMode: !!cfg.demo_mode });
+  const gate = new ByokGate(dialogEl, { demoMode: !!cfg.demo });
   const api  = new ApiClient(() => gate.getKey());
   const sse  = new SseClient(api);
 

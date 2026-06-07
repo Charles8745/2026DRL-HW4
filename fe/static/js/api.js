@@ -16,7 +16,7 @@ export class ApiClient {
   async loadConfig() {
     const res = await fetch('/api/config', { headers: this._headers() });
     if (!res.ok) throw new ApiError('config_failed', res.status);
-    return res.json();   // { demo_mode, allow_env_key?, media:{title:url}, ... }
+    return res.json();   // { demo, models:{chat,embed}, media:{title:url} }
   }
 
   // Non-stream fallback. Returns { session_id, reply, blocked, awaiting_confirmation, trace }.
