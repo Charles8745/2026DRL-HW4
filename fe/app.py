@@ -62,6 +62,29 @@ def create_app(orchestrator=None, *, memory=None, corpus_cache=None):
         out = orch.process(sid, body["message"])
         return _no_store(jsonify({"session_id": sid, **out}))
 
+    @app.post("/api/chat/stream")
+    def chat_stream():
+        from flask import Response
+        from fe.streaming import StreamRunner
+        key, err = _resolve_key(request)
+        if err:
+            # zh error, JSON, NO stream
+            msg = "請先設定您的 OpenAI 金鑰再開始對話。" if err == "missing_key" \
+                else "金鑰格式不正確，請重新輸入。"
+            return _no_store(jsonify({"error": err, "message": msg})), 401
+        body = _strip_keylike(request.get_json(force=True))
+        memory_ = app.config["MEMORY"]
+        sid = body.get("session_id") or memory_.new_session()
+        orch = build_request_orchestrator(
+            key, model=config.MODEL, embed_model=config.EMBED_MODEL,
+            memory=memory_, corpus_cache=app.config["CORPUS_CACHE"])
+        gen = StreamRunner().run(orch, sid, body["message"], request_key=key)
+        return Response(gen, mimetype="text/event-stream", headers={
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        })
+
     @app.get("/api/config")
     def api_config():
         from de.data.catalog import load_catalog

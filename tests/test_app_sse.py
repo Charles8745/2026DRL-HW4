@@ -262,3 +262,67 @@ def test_config_contains_no_key(monkeypatch):
     raw = app.test_client().get("/api/config").get_data(as_text=True)
     assert "sk-LEAKCANARY" not in raw
     assert "API_KEY" not in raw
+
+
+def _recommend_script():
+    from be.harness.llm import ToolCall
+    return [
+        LLMResponse(text="推薦30萬sport", total_tokens=2),                                  # rewrite
+        LLMResponse(text="找車推薦", total_tokens=1),                                        # route
+        LLMResponse(tool_calls=[ToolCall("recommend", {"budget": 300000, "usage": "sport"})], total_tokens=5),
+        LLMResponse(text="為您推薦這幾台", total_tokens=4),                                   # handler reply
+    ]
+
+
+def test_stream_endpoint_200_and_content_type(monkeypatch):
+    app = _byok_app(monkeypatch, _fallback_script(), demo=False)
+    r = app.test_client().post("/api/chat/stream", json={"message": "嗨", "session_id": "s1"},
+                               headers={"X-RideButler-Key": "sk-validvalidvalidvalid01"})
+    assert r.status_code == 200
+    assert r.headers["Content-Type"].startswith("text/event-stream")
+    assert r.headers.get("X-Accel-Buffering") == "no"
+    assert "no-store" in r.headers.get("Cache-Control", "")
+    assert r.headers.get("Connection") == "keep-alive"
+
+
+def test_stream_ordered_frames_end_with_done(monkeypatch):
+    app = _byok_app(monkeypatch, _fallback_script(), demo=False)
+    r = app.test_client().post("/api/chat/stream", json={"message": "嗨", "session_id": "s2"},
+                               headers={"X-RideButler-Key": "sk-validvalidvalidvalid01"})
+    frames = parse_sse(r.get_data(as_text=True))
+    types = event_types(frames)
+    assert types[0] == "guard"
+    assert "final" in types
+    assert types[-1] == "done"
+    # guard before final, final before done (ordered)
+    assert types.index("guard") < types.index("final") < types.index("done")
+
+
+def test_stream_no_key_non_demo_returns_401_no_stream(monkeypatch):
+    app = _byok_app(monkeypatch, _fallback_script(), demo=False)
+    r = app.test_client().post("/api/chat/stream", json={"message": "嗨"})
+    assert r.status_code == 401
+    assert r.get_json()["error"] == "missing_key"
+    # zh error, NOT an event-stream
+    assert not r.headers["Content-Type"].startswith("text/event-stream")
+    assert "no-store" in r.headers.get("Cache-Control", "")
+
+
+def test_stream_final_trace_equals_chat_trace_same_input(monkeypatch):
+    # /api/chat and /api/chat/stream must produce the SAME trace for the same input.
+    # Determinism contract: both apps use the SAME script (_recommend_script), the SAME
+    # seed (DataStore(seed=42) inside _byok_app), and the SAME session_id ("T"). Memory is
+    # PER-APP (each _byok_app builds its own SessionStore), so the two calls don't share
+    # session state and the order of the two posts is irrelevant — the exact-equality holds
+    # only because process() is fully deterministic for the same seed+script+sid.
+    app_json = _byok_app(monkeypatch, _recommend_script(), demo=False)
+    r1 = app_json.test_client().post("/api/chat", json={"message": "30萬sport", "session_id": "T"},
+                                     headers={"X-RideButler-Key": "sk-validvalidvalidvalid01"})
+    chat_trace = r1.get_json()["trace"]
+
+    app_sse = _byok_app(monkeypatch, _recommend_script(), demo=False)
+    r2 = app_sse.test_client().post("/api/chat/stream", json={"message": "30萬sport", "session_id": "T"},
+                                    headers={"X-RideButler-Key": "sk-validvalidvalidvalid01"})
+    frames = parse_sse(r2.get_data(as_text=True))
+    final = [f for f in frames if f["event"] == "final"][0]
+    assert final["data"]["trace"] == chat_trace
