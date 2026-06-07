@@ -1,4 +1,4 @@
-from harness.retrieval.bm25 import BM25Index, tokenize
+from be.harness.retrieval.bm25 import BM25Index, tokenize
 
 
 def test_tokenize_chinese_drops_blanks():

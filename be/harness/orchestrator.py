@@ -1,10 +1,10 @@
 import config
-from harness.governance import check_input, is_affirmative, TurnBudget
-from harness.tools import TOOL_FUNCS
-from harness.rewriter import rewrite
-from harness.router import route
-from harness.handlers import run_handler
-from harness.prompts import FALLBACK_SYS
+from be.harness.governance import check_input, is_affirmative, TurnBudget
+from be.harness.tools import TOOL_FUNCS
+from be.harness.rewriter import rewrite
+from be.harness.router import route
+from be.harness.handlers import run_handler
+from be.harness.prompts import FALLBACK_SYS
 
 _BOOKING_CUES = ("約看車", "預約看車", "幫我約", "約看")
 

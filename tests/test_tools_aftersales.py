@@ -1,5 +1,5 @@
-from data.store import DataStore
-from harness.tools import create_ticket, escalate_to_human
+from de.data.store import DataStore
+from be.harness.tools import create_ticket, escalate_to_human
 
 def test_create_ticket():
     S = DataStore(seed=42)

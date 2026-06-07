@@ -8,8 +8,8 @@ module imports cheaply for unit tests.
 """
 import argparse, json, re
 
-from harness.governance import groundedness_violations
-from eval.run_eval import _facts_from_trace
+from be.harness.governance import groundedness_violations
+from be.eval.run_eval import _facts_from_trace
 
 CATEGORIES = {"usage", "edge", "exception", "security"}
 CHECK_KEYS = {"router_label", "tools", "no_domain_tool", "blocked",
@@ -138,20 +138,20 @@ def main():
     ap.add_argument("--min-interval", type=float, default=0.0, help="min seconds between API calls")
     ap.add_argument("--offset", type=int, default=0, help="skip first N cases")
     ap.add_argument("--limit", type=int, default=None, help="run at most N cases (smoke test)")
-    ap.add_argument("--out", default="eval/robustness_results.json")
+    ap.add_argument("--out", default="be/eval/robustness_results.json")
     args = ap.parse_args()
 
     import config
-    from eval.run_full import ThrottledRetryClient
-    from harness.embedder import OpenAIEmbedder
-    from harness.reranker import LLMReranker
-    from harness.retrieval.retriever import HybridRetriever
-    from data.store import DataStore
-    from harness.memory import SessionStore
-    from harness.orchestrator import Orchestrator
+    from be.eval.run_full import ThrottledRetryClient
+    from be.harness.embedder import OpenAIEmbedder
+    from be.harness.reranker import LLMReranker
+    from be.harness.retrieval.retriever import HybridRetriever
+    from de.data.store import DataStore
+    from be.harness.memory import SessionStore
+    from be.harness.orchestrator import Orchestrator
 
     model = args.model or config.MODEL
-    cases = json.load(open("eval/robustness_testset.json", encoding="utf-8"))
+    cases = json.load(open("be/eval/robustness_testset.json", encoding="utf-8"))
     cases = cases[args.offset:]
     if args.limit is not None:
         cases = cases[:args.limit]

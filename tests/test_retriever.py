@@ -1,6 +1,6 @@
-from harness.embedder import FakeEmbedder
-from harness.reranker import FakeReranker
-from harness.retrieval.retriever import HybridRetriever, _rrf, _snippet
+from be.harness.embedder import FakeEmbedder
+from be.harness.reranker import FakeReranker
+from be.harness.retrieval.retriever import HybridRetriever, _rrf, _snippet
 
 CATALOG = [
     {"title": "Scoot", "brand": "Yamaha", "usage": "scooter",

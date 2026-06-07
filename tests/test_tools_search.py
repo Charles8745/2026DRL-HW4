@@ -1,5 +1,5 @@
-from data.store import DataStore
-from harness.tools import search_listings, recommend
+from de.data.store import DataStore
+from be.harness.tools import search_listings, recommend
 
 S = DataStore(seed=42)
 

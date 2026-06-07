@@ -1,4 +1,4 @@
-from harness.governance import (check_input, is_affirmative, groundedness_violations,
+from be.harness.governance import (check_input, is_affirmative, groundedness_violations,
                                  TurnBudget)
 
 def test_input_flags_injection():

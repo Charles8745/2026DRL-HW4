@@ -1,5 +1,5 @@
-from harness.llm import FakeLLM, LLMResponse
-from harness.router import route, LABELS
+from be.harness.llm import FakeLLM, LLMResponse
+from be.harness.router import route, LABELS
 
 def test_route_returns_clean_label():
     llm = FakeLLM([LLMResponse(text="找車推薦\n", total_tokens=3)])

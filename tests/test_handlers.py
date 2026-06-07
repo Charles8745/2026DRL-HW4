@@ -1,7 +1,7 @@
-from data.store import DataStore
-from harness.llm import FakeLLM, LLMResponse, ToolCall
-from harness.governance import TurnBudget
-from harness.handlers import run_handler
+from de.data.store import DataStore
+from be.harness.llm import FakeLLM, LLMResponse, ToolCall
+from be.harness.governance import TurnBudget
+from be.harness.handlers import run_handler
 
 def test_handler_executes_tool_then_replies():
     S = DataStore(seed=42)

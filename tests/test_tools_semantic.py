@@ -1,8 +1,8 @@
-from data.store import DataStore
-from harness.embedder import FakeEmbedder
-from harness.reranker import FakeReranker
-from harness.retrieval.retriever import HybridRetriever
-from harness.tools import semantic_search
+from de.data.store import DataStore
+from be.harness.embedder import FakeEmbedder
+from be.harness.reranker import FakeReranker
+from be.harness.retrieval.retriever import HybridRetriever
+from be.harness.tools import semantic_search
 
 
 def _store():

@@ -1,6 +1,6 @@
 import json
-from harness.tools import TOOL_FUNCS, CONFIRM_REQUIRED, schemas_for
-from harness.prompts import handler_sys
+from be.harness.tools import TOOL_FUNCS, CONFIRM_REQUIRED, schemas_for
+from be.harness.prompts import handler_sys
 
 def _confirm_summary(name, args):
     return f"要為您執行「{name}」（參數：{json.dumps(args, ensure_ascii=False)}），確認嗎？"

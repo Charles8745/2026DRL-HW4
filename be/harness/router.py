@@ -1,4 +1,4 @@
-from harness.prompts import ROUTER_SYS
+from be.harness.prompts import ROUTER_SYS
 
 LABELS = ["找車推薦", "規格比較", "交易訂單", "售後轉真人", "閒聊範圍外"]
 

@@ -1,9 +1,9 @@
 import json
 from collections import Counter
-from eval.robustness_eval import CATEGORIES, CHECK_KEYS
-from harness.router import LABELS
+from be.eval.robustness_eval import CATEGORIES, CHECK_KEYS
+from be.harness.router import LABELS
 
-CASES = json.load(open("eval/robustness_testset.json", encoding="utf-8"))
+CASES = json.load(open("be/eval/robustness_testset.json", encoding="utf-8"))
 
 def test_count_frozen():
     assert len(CASES) == 40

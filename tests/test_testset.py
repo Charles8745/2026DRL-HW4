@@ -1,6 +1,6 @@
 import json, collections
 def test_quota_and_schema():
-    data = json.load(open("eval/testset.json", encoding="utf-8"))
+    data = json.load(open("be/eval/testset.json", encoding="utf-8"))
     by = collections.Counter(c["expected_domain"] for c in data)
     for d in ["找車推薦","規格比較","交易訂單","售後轉真人"]:
         assert by[d] >= 5, d
@@ -11,10 +11,10 @@ def test_quota_and_schema():
 
 def test_main_testset_frozen_at_27():
     # The §7.1-7.3 honest numbers are computed on exactly these 27 cases; guard against drift.
-    assert len(json.load(open("eval/testset.json", encoding="utf-8"))) == 27
+    assert len(json.load(open("be/eval/testset.json", encoding="utf-8"))) == 27
 
 def test_sem_testset_schema():
-    cases = json.load(open("eval/sem_testset.json", encoding="utf-8"))
+    cases = json.load(open("be/eval/sem_testset.json", encoding="utf-8"))
     assert 3 <= len(cases) <= 5
     for c in cases:
         assert c["expected_tools"] == ["semantic_search"]

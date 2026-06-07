@@ -1,6 +1,6 @@
 import pytest
-from harness.reranker import FakeReranker, LLMReranker
-from harness.llm import FakeLLM, LLMResponse
+from be.harness.reranker import FakeReranker, LLMReranker
+from be.harness.llm import FakeLLM, LLMResponse
 
 CANDS = [
     {"doc_id": "scooter", "title": "scooter", "snippet": "速克達 通勤 省油"},

@@ -8,21 +8,21 @@ retries a transient 429/rate-limit so one blip doesn't turn a case into an `erro
 Production code is untouched: `score_case`/`THRESHOLDS` are reused from run_eval, and the
 client is a thin duck-typed wrapper over the real OpenAIClient (same LLM Protocol).
 
-Usage:  python -m eval.run_full                       # all 27, model from config (gpt-4.1-mini)
-        python -m eval.run_full --model gpt-4o-mini --min-interval 1
+Usage:  python -m be.eval.run_full                       # all 27, model from config (gpt-4.1-mini)
+        python -m be.eval.run_full --model gpt-4o-mini --min-interval 1
 """
 import argparse, json, re, time
 
 import config
-from eval.run_eval import score_case, score_multiturn, THRESHOLDS
-from harness.openai_client import OpenAIClient
-from harness.llm import LLMResponse
-from harness.embedder import OpenAIEmbedder
-from harness.reranker import LLMReranker
-from harness.retrieval.retriever import HybridRetriever
-from data.store import DataStore
-from harness.memory import SessionStore
-from harness.orchestrator import Orchestrator
+from be.eval.run_eval import score_case, score_multiturn, THRESHOLDS
+from be.harness.openai_client import OpenAIClient
+from be.harness.llm import LLMResponse
+from be.harness.embedder import OpenAIEmbedder
+from be.harness.reranker import LLMReranker
+from be.harness.retrieval.retriever import HybridRetriever
+from de.data.store import DataStore
+from be.harness.memory import SessionStore
+from be.harness.orchestrator import Orchestrator
 
 DOMAINS = {  # testset id prefix -> human label (matches report's 5 router classes + eval buckets)
     "find": "找車推薦", "spec": "規格比較", "txn": "交易訂單", "after": "售後轉真人",
@@ -91,10 +91,10 @@ def main():
     ap.add_argument("--min-interval", type=float, default=0.0, help="min seconds between API calls")
     ap.add_argument("--offset", type=int, default=0, help="skip first N cases")
     ap.add_argument("--limit", type=int, default=None, help="run at most N cases (smoke test)")
-    ap.add_argument("--out", default="eval/results.json")
+    ap.add_argument("--out", default="be/eval/results.json")
     args = ap.parse_args()
 
-    cases = json.load(open("eval/testset.json", encoding="utf-8"))
+    cases = json.load(open("be/eval/testset.json", encoding="utf-8"))
     cases = cases[args.offset:]
     if args.limit is not None:
         cases = cases[:args.limit]

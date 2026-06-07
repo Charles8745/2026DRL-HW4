@@ -1,6 +1,6 @@
-from data.catalog import load_catalog
-from data.listings import synth_listings
-from data.orders import synth_orders
+from de.data.catalog import load_catalog
+from de.data.listings import synth_listings
+from de.data.orders import synth_orders
 
 class DataStore:
     def __init__(self, seed: int = 42):

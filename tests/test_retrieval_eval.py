@@ -1,4 +1,4 @@
-from eval.retrieval_eval import recall_at_k, mrr, ndcg_at_k
+from be.eval.retrieval_eval import recall_at_k, mrr, ndcg_at_k
 
 
 def test_recall_capped_by_min_rel_k():
@@ -30,7 +30,7 @@ def test_ndcg_discounts_lower_ranks():
 
 def test_run_ablation_shape_offline():
     # ablation runner works with a fake retriever (no API); verifies config wiring
-    from eval.retrieval_eval import run_ablation
+    from be.eval.retrieval_eval import run_ablation
 
     class StubRetriever:
         def retrieve(self, query, k=10, use_dense=True, use_rerank=True):

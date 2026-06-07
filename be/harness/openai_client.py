@@ -1,6 +1,6 @@
 import json
 from openai import OpenAI
-from harness.llm import LLMResponse, ToolCall
+from be.harness.llm import LLMResponse, ToolCall
 import config
 
 

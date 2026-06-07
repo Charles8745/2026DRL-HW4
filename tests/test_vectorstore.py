@@ -1,4 +1,4 @@
-from harness.retrieval.vectorstore import VectorStore
+from be.harness.retrieval.vectorstore import VectorStore
 
 
 def test_query_ranks_by_cosine():

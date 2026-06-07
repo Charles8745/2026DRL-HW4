@@ -1,8 +1,8 @@
 import json
 from types import SimpleNamespace
 
-from harness.openai_client import OpenAIClient, _to_openai_tools, _to_openai_messages
-from harness.llm import LLMResponse
+from be.harness.openai_client import OpenAIClient, _to_openai_tools, _to_openai_messages
+from be.harness.llm import LLMResponse
 
 
 # --- pure converters -------------------------------------------------------

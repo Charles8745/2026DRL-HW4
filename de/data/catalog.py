@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-from data.spec_parser import parse_specs
+from de.data.spec_parser import parse_specs
 
 CSV_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "product_dataset.csv")
 

@@ -1,4 +1,4 @@
-from eval.run_eval import score_case, select_cases, run, score_multiturn
+from be.eval.run_eval import score_case, select_cases, run, score_multiturn
 
 def test_router_accuracy_metric():
     case = {"id":"x","input":"i","expected_domain":"找車推薦","expected_tools":["recommend"],"ground_truth":{}}

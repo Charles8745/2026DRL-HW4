@@ -1,4 +1,4 @@
-from harness.prompts import REWRITER_SYS
+from be.harness.prompts import REWRITER_SYS
 
 def rewrite(llm, store, sid, raw_input: str) -> dict:
     history = store.get(sid)["history"]

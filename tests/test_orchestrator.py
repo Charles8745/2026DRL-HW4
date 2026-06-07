@@ -1,7 +1,7 @@
-from data.store import DataStore
-from harness.memory import SessionStore
-from harness.llm import FakeLLM, LLMResponse, ToolCall
-from harness.orchestrator import Orchestrator
+from de.data.store import DataStore
+from be.harness.memory import SessionStore
+from be.harness.llm import FakeLLM, LLMResponse, ToolCall
+from be.harness.orchestrator import Orchestrator
 
 def _orch(scripted):
     return Orchestrator(FakeLLM(scripted), DataStore(seed=42), SessionStore())
@@ -120,9 +120,9 @@ def test_two_turn_chain_recommend_then_book_first_via_ordinal():
 def test_semantic_search_sets_viewed_for_ordinal_reference():
     # A semantic query fires semantic_search; its flat listing list must populate
     # viewed_listings so "第一台" ordinal reference works on retrieved results.
-    from harness.embedder import FakeEmbedder
-    from harness.reranker import FakeReranker
-    from harness.retrieval.retriever import HybridRetriever
+    from be.harness.embedder import FakeEmbedder
+    from be.harness.reranker import FakeReranker
+    from be.harness.retrieval.retriever import HybridRetriever
     store = DataStore(seed=42)
     store.retriever = HybridRetriever(store.catalog, FakeEmbedder(64), FakeReranker())
     o = Orchestrator(FakeLLM([

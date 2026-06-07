@@ -1,4 +1,4 @@
-from harness.tools import TOOL_GROUPS, TOOL_FUNCS, schemas_for
+from be.harness.tools import TOOL_GROUPS, TOOL_FUNCS, schemas_for
 
 def test_four_groups_findcar_has_three_tools():
     assert set(TOOL_GROUPS) == {"找車推薦","規格比較","交易訂單","售後轉真人"}

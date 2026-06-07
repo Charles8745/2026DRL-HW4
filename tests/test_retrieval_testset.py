@@ -1,12 +1,12 @@
 import json
-from data.store import DataStore
+from de.data.store import DataStore
 
 
 def test_retrieval_testset_valid():
     s = DataStore(seed=42)
     titles = {c["title"] for c in s.catalog}
     in_sale = {l["model"] for l in s.listings if l["status"] == "在售"}
-    cases = json.load(open("eval/retrieval_testset.json", encoding="utf-8"))
+    cases = json.load(open("be/eval/retrieval_testset.json", encoding="utf-8"))
     assert 10 <= len(cases) <= 25
     ids = set()
     for c in cases:

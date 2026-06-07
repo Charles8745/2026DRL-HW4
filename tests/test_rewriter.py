@@ -1,6 +1,6 @@
-from harness.llm import FakeLLM, LLMResponse
-from harness.memory import SessionStore
-from harness.rewriter import rewrite
+from be.harness.llm import FakeLLM, LLMResponse
+from be.harness.memory import SessionStore
+from be.harness.rewriter import rewrite
 
 def test_rewrite_uses_llm_text_and_resolves_ordinal():
     store = SessionStore(); sid = store.new_session()

@@ -1,4 +1,4 @@
-from data.store import DataStore
+from de.data.store import DataStore
 
 def test_store_builds_all_tables():
     s = DataStore(seed=42)

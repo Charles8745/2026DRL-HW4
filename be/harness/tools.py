@@ -1,5 +1,5 @@
-from data.store import DataStore
-from harness.retrieval.retriever import FINAL_K
+from de.data.store import DataStore
+from be.harness.retrieval.retriever import FINAL_K
 
 def _ok(data):  return {"ok": True, "data": data, "error": None}
 def _err(msg):  return {"ok": False, "data": None, "error": msg}

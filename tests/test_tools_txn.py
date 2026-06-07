@@ -1,5 +1,5 @@
-from data.store import DataStore
-from harness.tools import check_order, book_viewing
+from de.data.store import DataStore
+from be.harness.tools import check_order, book_viewing
 
 def test_check_order_by_id():
     S = DataStore(seed=42)

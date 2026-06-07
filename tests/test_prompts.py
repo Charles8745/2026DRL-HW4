@@ -1,4 +1,4 @@
-from harness.prompts import REWRITER_SYS, ROUTER_SYS, FALLBACK_SYS, handler_sys
+from be.harness.prompts import REWRITER_SYS, ROUTER_SYS, FALLBACK_SYS, handler_sys
 
 def test_router_lists_all_five_labels():
     for label in ["找車推薦","規格比較","交易訂單","售後轉真人","閒聊範圍外"]:

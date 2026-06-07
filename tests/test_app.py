@@ -1,8 +1,8 @@
-from harness.llm import FakeLLM, LLMResponse
-from data.store import DataStore
-from harness.memory import SessionStore
-from harness.orchestrator import Orchestrator
-from app import create_app
+from be.harness.llm import FakeLLM, LLMResponse
+from de.data.store import DataStore
+from be.harness.memory import SessionStore
+from be.harness.orchestrator import Orchestrator
+from fe.app import create_app
 
 def test_chat_endpoint_returns_reply_and_session():
     llm = FakeLLM([

@@ -1,5 +1,5 @@
 import numpy as np
-from harness.embedder import FakeEmbedder
+from be.harness.embedder import FakeEmbedder
 
 
 def test_fake_embedder_deterministic_and_normalized():

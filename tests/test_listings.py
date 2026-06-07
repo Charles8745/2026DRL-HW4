@@ -1,5 +1,5 @@
-from data.catalog import load_catalog
-from data.listings import synth_listings
+from de.data.catalog import load_catalog
+from de.data.listings import synth_listings
 
 def test_deterministic_with_seed():
     cat = load_catalog()

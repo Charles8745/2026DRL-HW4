@@ -1,4 +1,4 @@
-from harness.llm import FakeLLM, ToolCall, LLMResponse
+from be.harness.llm import FakeLLM, ToolCall, LLMResponse
 
 def test_fake_llm_returns_scripted_in_order():
     llm = FakeLLM([

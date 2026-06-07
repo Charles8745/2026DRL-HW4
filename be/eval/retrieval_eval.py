@@ -4,7 +4,7 @@ for three configs (BM25 only / +dense RRF / +rerank), using REAL OpenAI embeddin
 is run multiple times and reported as mean ± spread. recall@10 = the RRF candidate-pool
 ceiling the reranker reorders within.
 
-Usage:  python -m eval.retrieval_eval
+Usage:  python -m be.eval.retrieval_eval
 """
 import json
 import math
@@ -71,13 +71,13 @@ def run_ablation(retriever, cases):
 
 def main():
     import config
-    from data.store import DataStore
-    from harness.openai_client import OpenAIClient
-    from harness.embedder import OpenAIEmbedder
-    from harness.reranker import LLMReranker
-    from harness.retrieval.retriever import HybridRetriever
+    from de.data.store import DataStore
+    from be.harness.openai_client import OpenAIClient
+    from be.harness.embedder import OpenAIEmbedder
+    from be.harness.reranker import LLMReranker
+    from be.harness.retrieval.retriever import HybridRetriever
 
-    cases = json.load(open("eval/retrieval_testset.json", encoding="utf-8"))
+    cases = json.load(open("be/eval/retrieval_testset.json", encoding="utf-8"))
     store = DataStore(seed=42)
     llm = OpenAIClient()
     retriever = HybridRetriever(store.catalog, OpenAIEmbedder(), LLMReranker(llm))
@@ -90,9 +90,9 @@ def main():
               f"{m['mrr@10']:.3f}  {m['ndcg@5']:.3f}   ({m['recall@10']:.3f}, repeats={r['repeats']})")
     json.dump({"model": config.MODEL, "embed_model": config.EMBED_MODEL,
                "n": len(cases), "configs": result},
-              open("eval/retrieval_results.json", "w", encoding="utf-8"),
+              open("be/eval/retrieval_results.json", "w", encoding="utf-8"),
               ensure_ascii=False, indent=2)
-    print("\nwrote eval/retrieval_results.json")
+    print("\nwrote be/eval/retrieval_results.json")
 
 
 if __name__ == "__main__":

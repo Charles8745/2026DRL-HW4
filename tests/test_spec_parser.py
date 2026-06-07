@@ -1,4 +1,4 @@
-from data.spec_parser import parse_specs
+from de.data.spec_parser import parse_specs
 
 R9 = (
     "【規格】\n引擎形式: 水冷四行程三汽缸\n座高(m): 830mm\n全重: 195kg\n"

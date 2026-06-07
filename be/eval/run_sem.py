@@ -3,11 +3,11 @@ and check that (a) the semantic query fires semantic_search and (b) the grounded
 reply cites only prices/specs the tool returned. Reported separately in report §7.5;
 the frozen 27-case main eval (run_full) is untouched.
 
-Usage:  python -m eval.run_sem
+Usage:  python -m be.eval.run_sem
 """
 import json
 
-from harness.governance import groundedness_violations
+from be.harness.governance import groundedness_violations
 
 
 def _retrieved_numbers(out: dict) -> dict:
@@ -25,18 +25,18 @@ def _retrieved_numbers(out: dict) -> dict:
                     if isinstance(it.get(k), int):
                         nums.append(it[k])
     return {"prices": nums}
-from harness.openai_client import OpenAIClient
-from harness.embedder import OpenAIEmbedder
-from harness.reranker import LLMReranker
-from harness.retrieval.retriever import HybridRetriever
-from data.store import DataStore
-from harness.memory import SessionStore
-from harness.orchestrator import Orchestrator
+from be.harness.openai_client import OpenAIClient
+from be.harness.embedder import OpenAIEmbedder
+from be.harness.reranker import LLMReranker
+from be.harness.retrieval.retriever import HybridRetriever
+from de.data.store import DataStore
+from be.harness.memory import SessionStore
+from be.harness.orchestrator import Orchestrator
 
 
 def main():
     import config
-    cases = json.load(open("eval/sem_testset.json", encoding="utf-8"))
+    cases = json.load(open("be/eval/sem_testset.json", encoding="utf-8"))
     llm = OpenAIClient()
     store = DataStore(seed=42)
     store.retriever = HybridRetriever(store.catalog, OpenAIEmbedder(), LLMReranker(llm))
@@ -69,7 +69,7 @@ def main():
     print(f"\n# sem-* e2e  model={config.MODEL}  embed={config.EMBED_MODEL}  n={n}")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     json.dump({"model": config.MODEL, "rows": rows, "summary": summary},
-              open("eval/sem_results.json", "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+              open("be/eval/sem_results.json", "w", encoding="utf-8"), ensure_ascii=False, indent=2)
 
 
 if __name__ == "__main__":

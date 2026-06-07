@@ -1,4 +1,4 @@
-from harness.memory import SessionStore
+from be.harness.memory import SessionStore
 
 def test_new_session_has_uuid_and_empty_state():
     store = SessionStore()

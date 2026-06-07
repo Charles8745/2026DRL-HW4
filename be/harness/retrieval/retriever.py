@@ -1,7 +1,7 @@
 import re
 
-from harness.retrieval.bm25 import BM25Index
-from harness.retrieval.vectorstore import VectorStore
+from be.harness.retrieval.bm25 import BM25Index
+from be.harness.retrieval.vectorstore import VectorStore
 
 RRF_K = 60
 CANDIDATE_N = 10

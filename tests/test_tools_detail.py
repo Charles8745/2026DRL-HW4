@@ -1,5 +1,5 @@
-from data.store import DataStore
-from harness.tools import get_listing_detail, compare_models
+from de.data.store import DataStore
+from be.harness.tools import get_listing_detail, compare_models
 
 S = DataStore(seed=42)
 

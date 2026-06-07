@@ -1,5 +1,5 @@
 import json, time
-from harness.governance import groundedness_violations
+from be.harness.governance import groundedness_violations
 
 THRESHOLDS = {"router_accuracy": 0.90, "task_success": 0.85, "groundedness_violation_rate": 0.0}
 
@@ -83,14 +83,14 @@ def main():
     ap.add_argument("--sleep", type=float, default=0.0, help="seconds to wait between cases (avoid 429)")
     args = ap.parse_args()
 
-    from harness.openai_client import OpenAIClient
-    from harness.embedder import OpenAIEmbedder
-    from harness.reranker import LLMReranker
-    from harness.retrieval.retriever import HybridRetriever
-    from data.store import DataStore
-    from harness.memory import SessionStore
-    from harness.orchestrator import Orchestrator
-    cases = json.load(open("eval/testset.json", encoding="utf-8"))
+    from be.harness.openai_client import OpenAIClient
+    from be.harness.embedder import OpenAIEmbedder
+    from be.harness.reranker import LLMReranker
+    from be.harness.retrieval.retriever import HybridRetriever
+    from de.data.store import DataStore
+    from be.harness.memory import SessionStore
+    from be.harness.orchestrator import Orchestrator
+    cases = json.load(open("be/eval/testset.json", encoding="utf-8"))
     batch = select_cases(cases, args.offset, args.limit)
     llm = OpenAIClient()
     store = DataStore(seed=42)
