@@ -269,3 +269,121 @@ def test_build_no_key_material_in_orchestrator_vars():
     # (str(vars(...)) renders nested objects as <... object at 0x...> and does NOT
     # expand embedder.key, so this is a top-level-surface check, not a deep walk).
     assert secret not in (str(vars(orch)) + str(vars(orch.store)))
+
+
+import threading
+
+
+def test_two_thread_spy_embedder_no_retriever_bleed():
+    """Each concurrent request must use its OWN embedder; the per-request retriever
+    must hold that request's embedder (no shared store.retriever swap race)."""
+    cache = CorpusEmbeddingCache()
+    mem = SessionStore()
+    results = {}
+    barrier = threading.Barrier(2)
+
+    def worker(name, key):
+        llm_f, emb_f, seen = _spy_factories()
+        barrier.wait()                       # maximize overlap
+        orch = keyauth.build_request_orchestrator(
+            key, model="m", embed_model="em", memory=mem,
+            corpus_cache=cache, llm_factory=llm_f, embedder_factory=emb_f)
+        # the retriever's live embedder is this request's spy embedder
+        results[name] = (orch.store.retriever.embedder.key, seen["embed_keys"])
+
+    k1, k2 = "sk-" + "1" * 20, "sk-" + "2" * 20
+    t1 = threading.Thread(target=worker, args=("a", k1))
+    t2 = threading.Thread(target=worker, args=("b", k2))
+    t1.start(); t2.start(); t1.join(); t2.join()
+    assert results["a"][0] == k1            # request a's retriever uses key1
+    assert results["b"][0] == k2            # request b's retriever uses key2
+    assert results["a"][1] == [k1]          # each spy embedder built with its own key
+    assert results["b"][1] == [k2]
+
+
+def test_cache_concurrent_build_embeds_once():
+    """Under a slow embedder hit by 2 threads at once, the double-checked build lock
+    must embed exactly once and hand both threads the SAME VectorStore."""
+    cache = CorpusEmbeddingCache()
+    gate = threading.Event()
+
+    class _SlowEmb(FakeEmbedder):
+        def __init__(self):
+            super().__init__()
+            self.calls = 0
+            self._lock = threading.Lock()
+
+        def embed(self, texts):
+            with self._lock:
+                self.calls += 1
+            gate.wait(timeout=2)            # hold inside the build so both threads race
+            return super().embed(texts)
+
+    emb = _SlowEmb()
+    out = {}
+    barrier = threading.Barrier(2)
+
+    def worker(name):
+        barrier.wait()
+        out[name] = cache.get_or_build("em", _DOC_IDS, _TEXTS, emb)
+
+    t1 = threading.Thread(target=worker, args=("a",))
+    t2 = threading.Thread(target=worker, args=("b",))
+    t1.start(); t2.start()
+    gate.set()
+    t1.join(); t2.join()
+    assert out["a"] is out["b"]            # same cached object
+    assert isinstance(out["a"], VectorStore)
+    assert emb.calls == 1                  # embedded exactly once despite 2 threads
+
+
+def test_concurrent_confirm_no_double_execute():
+    """Two simultaneous affirmatives on the SAME pending action must execute the
+    state-changing tool at most once (orchestrator clears pending_action before
+    executing)."""
+    from be.harness.llm import LLMResponse
+
+    class _NoLLM:
+        def generate(self, system, messages, tools=None):
+            return LLMResponse(text="ok", tool_calls=[], total_tokens=0)
+
+    mem = SessionStore()
+    sid = mem.new_session()
+    store = _config_build_store()
+    # arm a pending state-changing action (book_viewing) on a real listing
+    listing_id = store.listings[0]["listing_id"]
+    mem.get(sid)["slots"]["pending_action"] = {
+        "tool_name": "book_viewing",
+        "args": {"listing_id": listing_id, "datetime": "2026-07-01", "contact": "u"}}
+    orch = Orchestrator(_NoLLM(), store, mem)
+
+    orders_before = len(store.orders)
+    errors = []
+
+    def confirm():
+        try:
+            orch.process(sid, "是")
+        except Exception as e:           # second affirmative hits pending=None -> normal path
+            errors.append(e)
+
+    t1 = threading.Thread(target=confirm)
+    t2 = threading.Thread(target=confirm)
+    t1.start(); t2.start(); t1.join(); t2.join()
+    # at most ONE booking was created (pending cleared before execute -> no double)
+    assert len(store.orders) - orders_before <= 1
+
+
+def _config_build_store():
+    from de.data.store import DataStore
+    return DataStore(seed=42)
+
+
+def test_vars_sweep_no_key_in_keyauth_module():
+    """Static sweep: the keyauth module namespace must not hold a bare sk- key."""
+    secret = "sk-" + "SWEEP123" * 3
+    cache = CorpusEmbeddingCache()
+    llm_f, emb_f, _ = _spy_factories()
+    keyauth.build_request_orchestrator(
+        secret, model="m", embed_model="em", memory=SessionStore(),
+        corpus_cache=cache, llm_factory=llm_f, embedder_factory=emb_f)
+    assert secret not in str(vars(keyauth))
