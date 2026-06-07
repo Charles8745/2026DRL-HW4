@@ -129,3 +129,100 @@ def test_wall_clock_cap_aborts_a_stuck_worker():
     types = event_types(frames)
     assert "error" in types and types[-1] == "done"
     assert elapsed < 3.0        # wall-clock fired ~0.5s, did not wait for the 10s sleep
+
+
+import config as _cfg
+from fe.app import create_app
+from be.harness.memory import SessionStore as _SS
+
+
+def _byok_app(monkeypatch, scripted, *, demo=False, allow_env=False):
+    """BYOK-mode app whose per-request orchestrator runs a FakeLLM script.
+    We monkeypatch build_request_orchestrator so no real key/network is needed."""
+    import fe.app as appmod
+    from be.harness.orchestrator import Orchestrator
+    from be.harness.llm import FakeLLM
+    monkeypatch.setattr(_cfg, "DEMO_MODE", demo, raising=False)
+    monkeypatch.setattr(_cfg, "ALLOW_ENV_KEY", allow_env, raising=False)
+
+    shared_mem = _SS()
+
+    def _fake_build(key, *, model, embed_model, memory, corpus_cache):
+        return Orchestrator(FakeLLM(list(scripted)), DataStore(seed=42), memory)
+
+    monkeypatch.setattr(appmod, "build_request_orchestrator", _fake_build)
+    app = create_app(None, memory=shared_mem, corpus_cache=object())
+    return app
+
+
+def _fallback_script():
+    return [LLMResponse(text="嗨", total_tokens=1),
+            LLMResponse(text="閒聊範圍外", total_tokens=1),
+            LLMResponse(text="我是重機客服", total_tokens=1)]
+
+
+def test_chat_missing_key_returns_401(monkeypatch):
+    app = _byok_app(monkeypatch, _fallback_script(), demo=False)
+    r = app.test_client().post("/api/chat", json={"message": "嗨"})
+    assert r.status_code == 401
+    assert r.get_json()["error"] == "missing_key"
+
+
+def test_chat_invalid_key_format_returns_401(monkeypatch):
+    app = _byok_app(monkeypatch, _fallback_script(), demo=False)
+    r = app.test_client().post("/api/chat", json={"message": "嗨"},
+                               headers={"X-RideButler-Key": "not-a-key"})
+    assert r.status_code == 401
+    assert r.get_json()["error"] == "invalid_key"
+
+
+def test_chat_valid_key_returns_reply_and_no_store(monkeypatch):
+    app = _byok_app(monkeypatch, _fallback_script(), demo=False)
+    r = app.test_client().post("/api/chat", json={"message": "嗨"},
+                               headers={"X-RideButler-Key": "sk-validvalidvalidvalid01"})
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["reply"] == "我是重機客服"
+    assert "session_id" in body and "trace" in body
+    assert "no-store" in r.headers.get("Cache-Control", "")
+    assert r.headers.get("Pragma") == "no-cache"
+
+
+def test_chat_strips_body_api_key_before_process(monkeypatch):
+    # a body api_key/authorization must never reach process() as part of the message
+    captured = {}
+    import fe.app as appmod
+    from be.harness.orchestrator import Orchestrator
+    from be.harness.llm import FakeLLM
+    monkeypatch.setattr(_cfg, "DEMO_MODE", False, raising=False)
+
+    class _SpyOrch(Orchestrator):
+        def process(self, sid, user_input, on_step=None):
+            captured["msg"] = user_input
+            return {"reply": "ok", "blocked": False, "awaiting_confirmation": False,
+                    "trace": {"raw_input": user_input}}
+
+    def _fake_build(key, *, model, embed_model, memory, corpus_cache):
+        return _SpyOrch(FakeLLM([]), DataStore(seed=42), memory)
+
+    monkeypatch.setattr(appmod, "build_request_orchestrator", _fake_build)
+    app = create_app(None, memory=_SS(), corpus_cache=object())
+    r = app.test_client().post("/api/chat",
+                               json={"message": "嗨", "api_key": "sk-LEAKCANARYxxxxxxxxxxxxxx",
+                                     "authorization": "Bearer sk-LEAKCANARYxxxxxxxxxxxxxx"},
+                               headers={"X-RideButler-Key": "sk-validvalidvalidvalid01"})
+    assert r.status_code == 200
+    # only message reached process(); the stripped fields are gone
+    assert captured["msg"] == "嗨"
+    assert "sk-LEAKCANARY" not in json.dumps(r.get_json())
+
+
+def test_legacy_create_app_with_orchestrator_unchanged(monkeypatch):
+    # regression canary parity: create_app(orch) needs NO key (frozen test_app.py path)
+    from be.harness.orchestrator import Orchestrator
+    from be.harness.llm import FakeLLM
+    orch = Orchestrator(FakeLLM(_fallback_script()), DataStore(seed=42), _SS())
+    app = create_app(orch)
+    r = app.test_client().post("/api/chat", json={"message": "嗨"})
+    assert r.status_code == 200
+    assert r.get_json()["reply"] == "我是重機客服"
