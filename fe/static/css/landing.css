@@ -1,0 +1,139 @@
+/* fe/static/css/landing.css — Landing 招牌時刻：layout / hero float / search pill / FLIP morph.
+   Tokens from tokens.css (M3). No bare hex (lint §3.1). */
+
+.landing {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 100%;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 80% at 50% -10%, var(--c-surface-2), transparent),
+    var(--c-bg);
+}
+
+/* --- 背景漂浮 hero 卡 --- */
+.landing__hero-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: var(--z-base);
+}
+.hero-card {
+  position: absolute;
+  width: clamp(120px, 16vw, 220px);
+  aspect-ratio: 4 / 3;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  box-shadow: var(--sh-card);
+  opacity: 0;
+  transform: translateY(14px) scale(.96);
+  animation: hero-rise var(--dur-slow) var(--ease-out) forwards;
+  animation-delay: var(--hero-delay, 0ms);
+}
+.hero-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hero-card[data-hero='0'] { top: 8%;  left: 6%;  rotate: -5deg; }
+.hero-card[data-hero='1'] { top: 14%; right: 8%; rotate: 4deg; }
+.hero-card[data-hero='2'] { bottom: 16%; left: 10%; rotate: 3deg; }
+.hero-card[data-hero='3'] { bottom: 10%; right: 12%; rotate: -4deg; }
+.hero-card[data-hero='4'] { top: 42%; left: 2%;  rotate: 6deg; }
+.hero-card[data-hero='5'] { top: 38%; right: 2%; rotate: -6deg; }
+
+@keyframes hero-rise {
+  to { opacity: .9; transform: translateY(0) scale(1); }
+}
+
+/* hero stagger 淡出（送出時加 .is-leaving；JS 設 --hero-delay 反向時序） */
+.landing__hero-layer.is-leaving .hero-card {
+  animation: hero-fade var(--dur) var(--ease-out) forwards;
+  animation-delay: var(--hero-delay, 0ms);
+}
+@keyframes hero-fade {
+  to { opacity: 0; transform: translateY(-10px) scale(.98); }
+}
+
+/* --- 前景 stage --- */
+.landing__stage {
+  position: relative;
+  z-index: var(--z-panel);
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-6);
+  width: min(680px, 90vw);
+  text-align: center;
+}
+.landing__wordmark { display: grid; gap: var(--sp-2); }
+.wm-en {
+  font-family: var(--ff-display);
+  font-size: var(--fs-display);
+  font-weight: 600;
+  color: var(--c-ink);
+  letter-spacing: -.01em;
+}
+.wm-zh { font-size: var(--fs-md); color: var(--c-ink-soft); }
+
+/* --- search pill（morph source） --- */
+.landing__pill {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-5);
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-pill);
+  box-shadow: var(--sh-pop);
+  transition:
+    transform var(--dur-slow) var(--ease-out),
+    border-radius var(--dur-slow) var(--ease-out),
+    box-shadow var(--dur-slow) var(--ease-out);
+}
+.landing__pill-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font-size: var(--fs-md);
+  color: var(--c-ink);
+}
+.landing__pill-input:focus { outline: none; }
+.landing__pill-btn {
+  flex: none;
+  padding: var(--sp-2) var(--sp-5);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--c-green);
+  color: var(--c-on-green);
+  font-size: var(--fs-md);
+  cursor: pointer;
+}
+
+/* --- 4 chips --- */
+.landing__chips { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-2); }
+.landing__chip {
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-pill);
+  background: var(--c-surface);
+  color: var(--c-ink-soft);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.landing__chip:hover { background: var(--c-green-050); color: var(--c-green); }
+
+/* --- FLIP morph：pill→docked composer。JS 量測 first/last 後加 .is-morphing 觸發 transform。 --- */
+.landing.is-morphing .landing__hero-layer { /* 由 .is-leaving 控淡出 */ }
+.landing.is-morphing .landing__stage { transition: opacity var(--dur) var(--ease-out); opacity: 0; }
+.landing.is-morphing .landing__wordmark,
+.landing.is-morphing .landing__chips { opacity: 0; }
+
+/* reduced-motion：移除所有入場/morph 動畫，hero 直接定格、立即切換 */
+@media (prefers-reduced-motion: reduce) {
+  .hero-card,
+  .landing__hero-layer.is-leaving .hero-card { animation: none; opacity: .9; transform: none; }
+  .landing__pill { transition: none; }
+  .landing.is-morphing .landing__stage,
+  .landing.is-morphing .landing__wordmark,
+  .landing.is-morphing .landing__chips { transition: none; }
+}

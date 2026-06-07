@@ -34,3 +34,89 @@ export function liveSummary(count) {
   if (count <= 0) return '目前沒有符合條件的車輛';
   return '找到 ' + count + ' 台車輛';
 }
+
+// --- spec §3.3：4 個 zh 建議 chips（唯一字面源） ---
+export const LANDING_CHIPS = [
+  '30萬內 Yamaha 跑車',
+  '新手通勤省油好停',
+  '比較 CB650R 與 MT-07',
+  '查訂單 O001',
+];
+
+// mountLanding：把 landing 渲入 host，回傳 { root, pillInput, els } 供 M5.3 morph 取用。
+// onSubmit(text) 由 main.js 提供（擁有 SseClient 與序列化動態）。
+export function mountLanding(host, onSubmit) {
+  const root = document.createElement('section');
+  root.className = 'landing';
+  root.setAttribute('data-landing', '');
+
+  // 背景 6 張漂浮 hero 卡（純裝飾、aria-hidden、lazy、缺檔自隱）。
+  const heroLayer = document.createElement('div');
+  heroLayer.className = 'landing__hero-layer';
+  heroLayer.setAttribute('aria-hidden', 'true');
+  for (const spec of heroSpecs()) {
+    const card = document.createElement('div');
+    card.className = 'hero-card';
+    card.style.setProperty('--hero-delay', spec.staggerMs + 'ms');
+    card.setAttribute('data-hero', String(spec.index));
+    const img = document.createElement('img');
+    img.src = spec.src;
+    img.alt = '';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.setAttribute('referrerpolicy', 'no-referrer');
+    // 缺檔 onerror 自隱：藏整張卡片，不顯破圖。
+    img.addEventListener('error', () => { card.style.display = 'none'; });
+    card.appendChild(img);
+    heroLayer.appendChild(card);
+  }
+
+  // 前景：wordmark + search pill + chips。
+  const stage = document.createElement('div');
+  stage.className = 'landing__stage';
+
+  const mark = document.createElement('div');
+  mark.className = 'landing__wordmark';
+  mark.innerHTML =
+    '<span class="wm-en">RideButler</span>' +
+    '<span class="wm-zh">騎士管家 · 二手重機智慧客服</span>';
+
+  const form = document.createElement('form');
+  form.className = 'landing__pill';
+  form.setAttribute('role', 'search');
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'landing__pill-input';
+  input.autocomplete = 'off';
+  input.placeholder = '描述你想找的車，或試試下方建議';
+  input.setAttribute('aria-label', '描述你想找的車');
+  const btn = document.createElement('button');
+  btn.type = 'submit';
+  btn.className = 'landing__pill-btn';
+  btn.textContent = '開始';
+  form.append(input, btn);
+
+  const chips = document.createElement('div');
+  chips.className = 'landing__chips';
+  for (const text of LANDING_CHIPS) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'landing__chip';
+    chip.textContent = text;
+    chip.addEventListener('click', () => onSubmit(text));
+    chips.appendChild(chip);
+  }
+
+  function submit(e) {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (text) onSubmit(text);
+  }
+  form.addEventListener('submit', submit);
+
+  stage.append(mark, form, chips);
+  root.append(heroLayer, stage);
+  host.appendChild(root);
+
+  return { root, pillInput: input, els: { heroLayer, stage, form, chips } };
+}
