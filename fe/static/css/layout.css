@@ -1,0 +1,80 @@
+/* fe/static/css/layout.css — three-zone command center.
+   rail (64px) / center (flex) / panel (400px).
+   #app[data-view='landing'|'chat'] and #app[data-panel='open'|'collapsed']
+   drive the visible state machine. NO bare hex — tokens only. */
+#app {
+  display: grid;
+  grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--panel-w);
+  grid-template-areas: "rail center panel";
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+}
+
+.rail   { grid-area: rail;   z-index: var(--z-rail); }
+.center { grid-area: center; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+.panel  { grid-area: panel;  z-index: var(--z-panel); border-left: 1px solid var(--c-line);
+          background: var(--c-surface-2); overflow-y: auto; transition: transform var(--dur) var(--ease-out); }
+
+/* right panel collapse */
+#app[data-panel="collapsed"] { grid-template-columns: var(--rail-w) minmax(0, 1fr) 0; }
+#app[data-panel="collapsed"] .panel { transform: translateX(100%); pointer-events: none; }
+
+/* view switch: landing centers a hero stage; chat shows the log */
+.view-landing { display: none; }
+.view-chat    { display: none; }
+#app[data-view="landing"] .view-landing { display: flex; flex: 1; min-height: 0; }
+#app[data-view="chat"]    .view-chat    { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+
+/* left IconRail (deep green) */
+.rail {
+  background: var(--c-green);
+  color: var(--c-on-green);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--sp-3) 0;
+  gap: var(--sp-2);
+}
+.rail__brand {
+  font-family: var(--ff-display);
+  font-weight: 700;
+  color: var(--c-gold);            /* GOLD monogram — scarce use */
+  font-size: var(--fs-lg);
+  letter-spacing: .5px;
+  margin-bottom: var(--sp-4);
+  user-select: none;
+}
+.rail__btn {
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  background: transparent; border: none; border-radius: var(--r-md);
+  color: var(--c-on-green); font-size: var(--fs-lg);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.rail__btn:hover, .rail__btn[aria-pressed="true"] { background: var(--c-green-700); }
+.rail__spacer { flex: 1; }
+.rail__keydot {
+  width: 12px; height: 12px; border-radius: var(--r-pill);
+  background: var(--c-amber);      /* default amber until BYOK confirmed */
+  margin-top: var(--sp-2);
+}
+.rail__keydot[data-key="byok"]  { background: var(--c-green-050); box-shadow: 0 0 0 2px var(--c-green-050); }
+.rail[data-key="byok"]  .rail__keydot { background: var(--c-green-050); }
+.rail[data-key="demo"]  .rail__keydot { background: var(--c-amber); }
+
+/* demo amber banner (top of center) */
+.demo-banner {
+  background: var(--c-amber-050);
+  color: var(--c-amber);
+  font-size: var(--fs-sm);
+  padding: var(--sp-2) var(--sp-4);
+  text-align: center;
+  z-index: var(--z-banner);
+}
+
+/* responsive: collapse panel under 1100px (rail stays) */
+@media (max-width: 1100px) {
+  #app { grid-template-columns: var(--rail-w) minmax(0, 1fr) 0; }
+  #app .panel { transform: translateX(100%); }
+}
