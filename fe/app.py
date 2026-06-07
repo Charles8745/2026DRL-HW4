@@ -62,6 +62,16 @@ def create_app(orchestrator=None, *, memory=None, corpus_cache=None):
         out = orch.process(sid, body["message"])
         return _no_store(jsonify({"session_id": sid, **out}))
 
+    @app.get("/api/config")
+    def api_config():
+        from de.data.catalog import load_catalog
+        media = {c["title"]: c["media_url"] for c in load_catalog()}
+        return _no_store(jsonify({
+            "demo": bool(getattr(config, "DEMO_MODE", False)),
+            "models": {"chat": config.MODEL, "embed": config.EMBED_MODEL},
+            "media": media,
+        }))
+
     return app
 
 

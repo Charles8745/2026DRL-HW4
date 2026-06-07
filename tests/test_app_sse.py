@@ -226,3 +226,39 @@ def test_legacy_create_app_with_orchestrator_unchanged(monkeypatch):
     r = app.test_client().post("/api/chat", json={"message": "嗨"})
     assert r.status_code == 200
     assert r.get_json()["reply"] == "我是重機客服"
+
+
+from de.data.catalog import load_catalog
+
+
+def test_config_endpoint_shape_and_media_map(monkeypatch):
+    monkeypatch.setattr(_cfg, "DEMO_MODE", False, raising=False)
+    app = create_app(None, memory=_SS(), corpus_cache=object())
+    r = app.test_client().get("/api/config")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["demo"] is False
+    assert "models" in body and body["models"]["chat"] == _cfg.MODEL
+    assert body["models"]["embed"] == _cfg.EMBED_MODEL
+    media = body["media"]
+    cat = load_catalog()
+    # one entry per catalog title, mapping to its media_url
+    assert len(media) == len({c["title"] for c in cat})
+    sample = cat[0]
+    assert media[sample["title"]] == sample["media_url"]
+
+
+def test_config_demo_flag_true(monkeypatch):
+    monkeypatch.setattr(_cfg, "DEMO_MODE", True, raising=False)
+    app = create_app(None, memory=_SS(), corpus_cache=object())
+    body = app.test_client().get("/api/config").get_json()
+    assert body["demo"] is True
+
+
+def test_config_contains_no_key(monkeypatch):
+    monkeypatch.setattr(_cfg, "API_KEY", "sk-LEAKCANARYxxxxxxxxxxxxxx", raising=False)
+    monkeypatch.setattr(_cfg, "DEMO_MODE", True, raising=False)
+    app = create_app(None, memory=_SS(), corpus_cache=object())
+    raw = app.test_client().get("/api/config").get_data(as_text=True)
+    assert "sk-LEAKCANARY" not in raw
+    assert "API_KEY" not in raw
