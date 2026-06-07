@@ -1,0 +1,41 @@
+/* fe/static/css/base.css — reset + element base + self-hosted @font-face.
+   Fonts are optional: if woff2 missing, font-display swap falls back to the
+   system stack declared in tokens.css var(--ff-*). */
+@font-face {
+  font-family: "Fraunces";
+  src: url("/static/fonts/Fraunces.woff2") format("woff2");
+  font-weight: 400 700; font-display: swap; font-style: normal;
+}
+@font-face {
+  font-family: "Noto Sans TC";
+  src: url("/static/fonts/NotoSansTC-subset.woff2") format("woff2");
+  font-weight: 400 700; font-display: swap; font-style: normal;
+}
+@font-face {
+  font-family: "Space Mono";
+  src: url("/static/fonts/SpaceMono.woff2") format("woff2");
+  font-weight: 400 700; font-display: swap; font-style: normal;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--ff-body);
+  font-size: var(--fs-md);
+  line-height: var(--lh-body);
+  color: var(--c-ink);
+  background: var(--c-bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+h1, h2, h3, p, figure { margin: 0; }
+h1, h2, h3 { font-family: var(--ff-display); line-height: var(--lh-tight); font-weight: 600; }
+button { font: inherit; cursor: pointer; }
+input, textarea { font: inherit; color: inherit; }
+a { color: var(--c-green); text-decoration: none; }
+a:hover { text-decoration: underline; }
+img { max-width: 100%; display: block; }
+ul { margin: 0; padding: 0; list-style: none; }
+:focus-visible { outline: 2px solid var(--c-green); outline-offset: 2px; }
+[hidden] { display: none !important; }
