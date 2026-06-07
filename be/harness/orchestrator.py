@@ -12,6 +12,17 @@ from be.harness.prompts import FALLBACK_SYS
 
 _BOOKING_CUES = ("約看車", "預約看車", "幫我約", "約看")
 
+# strict "this message is ONLY a confirmation token" — distinct from the loose
+# substring is_affirmative (which matches e.g. "好" inside "想找…好停的車"). Used to
+# answer a stale/duplicate bare confirm (pending already consumed concurrently) with
+# zero LLM calls instead of mis-routing it (R7 concurrent-confirm path).
+_PURE_CONFIRM = ("好", "確認", "對", "是的", "ok", "yes", "沒問題", "可以")
+_CONFIRM_PUNCT = re.compile(r"[\s,，。.!！？?、~～]")
+
+
+def _is_pure_confirm(text: str) -> bool:
+    return _CONFIRM_PUNCT.sub("", (text or "").strip().lower()) in _PURE_CONFIRM
+
 OnStep = Callable[[str, dict], None]          # on_step(event_type, data) -> None
 
 # api_key / Authorization-shaped keys are dropped; sk-... literals are masked.
@@ -82,6 +93,19 @@ class Orchestrator:
             self._emit(on_step, "confirm_gate",
                        {"tool_name": pending["tool_name"], "args": pending["args"], "stage": "cancelled"})
             self._emit(on_step, "final", {"reply": ret["reply"], "blocked": False, "awaiting_confirmation": False,
+                                          "router_label": None, "resolved_listing_id": None,
+                                          "tokens": 0, "trace": ret["trace"]})
+            return ret
+
+        # 1b) bare-confirm with NO pending action (e.g. a duplicate "確認" whose pending
+        # was already consumed by a concurrent request): reply gracefully, no LLM call.
+        # Strict pure-confirm only — a substantive query containing "好" still routes.
+        if _is_pure_confirm(user_input):
+            reply = "目前沒有待確認的操作，請告訴我您的需求。"
+            self.memory.append_message(sid, "assistant", reply)
+            ret = {"reply": reply, "blocked": False, "awaiting_confirmation": False,
+                   "trace": {"confirmation": "noop"}}
+            self._emit(on_step, "final", {"reply": reply, "blocked": False, "awaiting_confirmation": False,
                                           "router_label": None, "resolved_listing_id": None,
                                           "tokens": 0, "trace": ret["trace"]})
             return ret

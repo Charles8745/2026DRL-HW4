@@ -1,9 +1,54 @@
 # fe/app.py
+import secrets
+import threading
+
 import config
 from flask import Flask, request, jsonify, render_template
 from fe.keyauth import extract_request_key, validate_key_format, build_request_orchestrator
 
 _KEYLIKE_BODY_FIELDS = ("api_key", "apikey", "openai_key", "authorization", "x-ridebutler-key")
+
+
+class _SessionGuard:
+    """Per-sid owner token + per-sid lock. Owner token binds a client-chosen
+    session_id to its creator (R7); the lock serializes pending_action read-modify-
+    write so concurrent confirms can't double-execute."""
+    def __init__(self):
+        self._owners: dict[str, str] = {}
+        self._locks: dict[str, threading.Lock] = {}
+        self._guard = threading.Lock()
+
+    def issue(self, sid: str) -> str:
+        with self._guard:
+            tok = self._owners.get(sid)
+            if tok is None:
+                tok = secrets.token_urlsafe(24)
+                self._owners[sid] = tok
+            return tok
+
+    def authorize(self, sid: str, presented: "str | None") -> tuple[bool, str]:
+        """Return (ok, owner_token). First use of a sid issues + binds the token.
+        Subsequent use requires the matching token."""
+        with self._guard:
+            existing = self._owners.get(sid)
+            if existing is None:
+                tok = secrets.token_urlsafe(24)
+                self._owners[sid] = tok
+                return True, tok
+            if presented and secrets.compare_digest(presented, existing):
+                return True, existing
+            return False, existing
+
+    def lock_for(self, sid: str) -> threading.Lock:
+        with self._guard:
+            lk = self._locks.get(sid)
+            if lk is None:
+                lk = threading.Lock()
+                self._locks[sid] = lk
+            return lk
+
+
+_SESSION_GUARD = _SessionGuard()
 
 
 def _strip_keylike(body: dict) -> dict:
@@ -56,11 +101,17 @@ def create_app(orchestrator=None, *, memory=None, corpus_cache=None):
         body = _strip_keylike(body)
         memory_ = app.config["MEMORY"]
         sid = body.get("session_id") or memory_.new_session()
+        ok, owner = _SESSION_GUARD.authorize(sid, request.headers.get("X-RideButler-Owner"))
+        if not ok:
+            return _no_store(jsonify({"error": "session_forbidden"})), 403
         orch = build_request_orchestrator(
             key, model=config.MODEL, embed_model=config.EMBED_MODEL,
             memory=memory_, corpus_cache=app.config["CORPUS_CACHE"])
-        out = orch.process(sid, body["message"])
-        return _no_store(jsonify({"session_id": sid, **out}))
+        with _SESSION_GUARD.lock_for(sid):
+            out = orch.process(sid, body["message"])
+        resp = _no_store(jsonify({"session_id": sid, **out}))
+        resp.headers["X-RideButler-Owner"] = owner
+        return resp
 
     @app.post("/api/chat/stream")
     def chat_stream():
@@ -75,15 +126,28 @@ def create_app(orchestrator=None, *, memory=None, corpus_cache=None):
         body = _strip_keylike(request.get_json(force=True))
         memory_ = app.config["MEMORY"]
         sid = body.get("session_id") or memory_.new_session()
+        ok, owner = _SESSION_GUARD.authorize(sid, request.headers.get("X-RideButler-Owner"))
+        if not ok:
+            return _no_store(jsonify({"error": "session_forbidden"})), 403
         orch = build_request_orchestrator(
             key, model=config.MODEL, embed_model=config.EMBED_MODEL,
             memory=memory_, corpus_cache=app.config["CORPUS_CACHE"])
-        gen = StreamRunner().run(orch, sid, body["message"], request_key=key)
-        return Response(gen, mimetype="text/event-stream", headers={
+        lock = _SESSION_GUARD.lock_for(sid)
+
+        def _locked_process(s, ui, on_step=None):
+            with lock:
+                return orch.process(s, ui, on_step=on_step)
+
+        class _Locked:
+            process = staticmethod(_locked_process)
+        gen = StreamRunner().run(_Locked(), sid, body["message"], request_key=key)
+        resp = Response(gen, mimetype="text/event-stream", headers={
             "Cache-Control": "no-store",
             "X-Accel-Buffering": "no",
             "Connection": "keep-alive",
+            "X-RideButler-Owner": owner,
         })
+        return resp
 
     @app.get("/api/config")
     def api_config():

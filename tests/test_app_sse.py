@@ -319,10 +319,79 @@ def test_stream_final_trace_equals_chat_trace_same_input(monkeypatch):
     r1 = app_json.test_client().post("/api/chat", json={"message": "30萬sport", "session_id": "T"},
                                      headers={"X-RideButler-Key": "sk-validvalidvalidvalid01"})
     chat_trace = r1.get_json()["trace"]
+    # sid "T" is now owned (module-level _SESSION_GUARD persists across the two app
+    # instances); reuse the issued owner token so the stream call isn't 403'd (R7).
+    owner = r1.headers["X-RideButler-Owner"]
 
     app_sse = _byok_app(monkeypatch, _recommend_script(), demo=False)
     r2 = app_sse.test_client().post("/api/chat/stream", json={"message": "30萬sport", "session_id": "T"},
-                                    headers={"X-RideButler-Key": "sk-validvalidvalidvalid01"})
+                                    headers={"X-RideButler-Key": "sk-validvalidvalidvalid01",
+                                             "X-RideButler-Owner": owner})
     frames = parse_sse(r2.get_data(as_text=True))
     final = [f for f in frames if f["event"] == "final"][0]
     assert final["data"]["trace"] == chat_trace
+
+
+import threading
+
+
+def test_session_owner_token_issued_and_enforced(monkeypatch):
+    app = _byok_app(monkeypatch, _fallback_script() * 2, demo=False)
+    c = app.test_client()
+    r1 = c.post("/api/chat", json={"message": "嗨"},
+                headers={"X-RideButler-Key": "sk-validvalidvalidvalid01"})
+    sid = r1.get_json()["session_id"]
+    owner = r1.headers.get("X-RideButler-Owner")
+    assert owner  # token issued on first use of this sid
+    # a DIFFERENT caller reusing the sid WITHOUT the owner token is rejected
+    r2 = c.post("/api/chat", json={"message": "嗨", "session_id": sid},
+                headers={"X-RideButler-Key": "sk-validvalidvalidvalid01"})
+    assert r2.status_code == 403
+    assert r2.get_json()["error"] == "session_forbidden"
+    # the legitimate owner (same token) is accepted
+    r3 = c.post("/api/chat", json={"message": "嗨", "session_id": sid},
+                headers={"X-RideButler-Key": "sk-validvalidvalidvalid01",
+                         "X-RideButler-Owner": owner})
+    assert r3.status_code == 200
+
+
+def test_concurrent_confirm_does_not_double_execute(monkeypatch):
+    # Two threads fire "確認" on the same pending booking; per-sid lock + one-shot
+    # pending_action consume must execute at most once.
+    import fe.app as appmod
+    from be.harness.orchestrator import Orchestrator
+    from be.harness.llm import FakeLLM, ToolCall
+    monkeypatch.setattr(_cfg, "DEMO_MODE", False, raising=False)
+    shared_mem = _SS()
+    store = DataStore(seed=42)
+
+    def _fake_build(key, *, model, embed_model, memory, corpus_cache):
+        # confirmation turn needs NO LLM call (pending path); empty script is fine
+        return Orchestrator(FakeLLM([]), store, memory)
+
+    monkeypatch.setattr(appmod, "build_request_orchestrator", _fake_build)
+    app = create_app(None, memory=shared_mem, corpus_cache=object())
+    c = app.test_client()
+
+    # seed a pending_action directly on the shared memory for a known sid
+    sid = shared_mem.new_session()
+    shared_mem.get(sid)["slots"]["pending_action"] = {
+        "tool_name": "book_viewing",
+        "args": {"listing_id": "L001", "datetime": "2026-06-13", "contact": "0912"}}
+    owner = appmod._SESSION_GUARD.issue(sid)  # pre-issue owner so both threads pass
+
+    n0 = len(store.orders)
+    results = []
+
+    def _fire():
+        rr = c.post("/api/chat", json={"message": "確認", "session_id": sid},
+                    headers={"X-RideButler-Key": "sk-validvalidvalidvalid01",
+                             "X-RideButler-Owner": owner})
+        results.append(rr.status_code)
+
+    ts = [threading.Thread(target=_fire) for _ in range(2)]
+    for t in ts: t.start()
+    for t in ts: t.join()
+    # exactly ONE booking created (no double-execute), both requests answered
+    assert len(store.orders) == n0 + 1
+    assert results.count(200) == 2
