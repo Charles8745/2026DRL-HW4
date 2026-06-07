@@ -45,14 +45,15 @@ cp .env.example .env          # 填入你的 OPENAI_API_KEY（從 https://platfo
 ## 執行
 
 ```bash
-python -m fe.app                 # 啟動 Flask，開 http://localhost:5000
+python -m fe.app                 # 啟動 Flask，開 http://localhost:5000（務必用 -m，勿 python fe/app.py）
 ```
-範例輸入：`30萬內想要 Yamaha 跑車`，右側 Decision Trace 會即時顯示 router 判定與工具呼叫。
+開啟後會先彈出 **BYOK 金鑰閘**（`<dialog>`）：貼上你自己的 OpenAI 金鑰（只走 HTTP header `X-RideButler-Key`，不入 body、不入 trace、不入 log）。送出 `30萬內想要 Yamaha 跑車`，**右側 PipelinePanel 會以 SSE 即時逐步串流**決策過程：安全檢查→查詢改寫→意圖路由→工具呼叫·語意檢索（內含 BM25→向量→RRF→Rerank 混合檢索子步）→記憶更新→完成，中央 ChatLog 同時渲染 inline 車款卡片。
 
 ## 測試
 
 ```bash
-python -m pytest -q           # 147 個單元測試，全程使用 Fake*（LLM/Embedder/Reranker），不需 API key、不花費用
+python -m pytest -q                               # 240 個 Python 單元測試，全程 Fake*（LLM/Embedder/Reranker），不需 API key、不花費用
+node --test 'fe/static/js/__tests__/*.test.mjs'   # 純邏輯 JS 模組（圖片 fallback 解析、pipeline reducer），Node v22 內建 runner、零依賴
 ```
 
 ## 評估
@@ -71,3 +72,20 @@ python -m be.eval.run_eval --offset 8 --limit 8     # 下一批（第 9–16 題
 - **兩階段確認閘**：`book_viewing` / `create_ticket` / `escalate_to_human` 等狀態變更工具，執行前先回確認摘要、暫停，使用者同意後才執行。
 - **Groundedness 護欄**：價格/規格/車況等事實必須來自工具回傳；型錄缺值（如 ZX-10R 馬力）標為「資料未提供」，不捏造。
 - **可重現資料**：型錄為真實 33 款車；二手刊登/訂單以固定 seed 合成、單調折舊。
+
+## 部署（BYOK · 單實例 · SSE-safe）
+
+公開部署採 **BYOK only**：每位使用者用自己的 OpenAI 金鑰，**主機絕不設 `OPENAI_API_KEY`**。
+
+```bash
+gunicorn --config gunicorn.conf.py wsgi:app      # gthread、workers 硬鉗為 1（boot self-check 拒 >1）、SSE 不緩衝
+```
+
+| 環境變數 | 預設 | 說明 |
+|---|---|---|
+| `DEMO_MODE` | `0` | 純 UI 旗標；**不**授權使用 `config.API_KEY` |
+| `ALLOW_ENV_KEY` | `0` | 唯一的 `.env` 金鑰回退授權；限 localhost／顯式 public override，公開主機務必保持 `0` |
+| `OPENAI_MODEL` | `gpt-4.1-mini` | 對話模型 |
+| `OPENAI_EMBED_MODEL` | `text-embedding-3-small` | 語料嵌入模型 |
+
+完整部署（Render / 通用 Docker）與單實例理由見 [`docs/DEPLOY.md`](docs/DEPLOY.md)。
