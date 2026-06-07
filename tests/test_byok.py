@@ -138,3 +138,43 @@ def test_redact_key_literal_and_generic():
 
 def test_redact_key_no_key_no_change():
     assert keyauth.redact_key("plain text", None) == "plain text"
+
+
+import config as _config_mod
+
+
+class _FakeReq:
+    """Minimal stand-in for a Flask request: headers dict + remote_addr."""
+    def __init__(self, headers=None, remote_addr="127.0.0.1"):
+        self.headers = headers or {}
+        self.remote_addr = remote_addr
+
+
+def test_extract_header_key_takes_precedence():
+    key = "sk-" + "h" * 20
+    req = _FakeReq(headers={"X-RideButler-Key": key})
+    assert keyauth.extract_request_key(req, allow_env=True) == key
+
+
+def test_extract_no_header_no_env_returns_none():
+    req = _FakeReq(headers={})
+    assert keyauth.extract_request_key(req, allow_env=False) is None
+
+
+def test_extract_env_fallback_on_localhost(monkeypatch):
+    monkeypatch.setattr(_config_mod, "API_KEY", "sk-" + "e" * 20, raising=False)
+    req = _FakeReq(headers={}, remote_addr="127.0.0.1")
+    assert keyauth.extract_request_key(req, allow_env=True) == "sk-" + "e" * 20
+
+
+def test_extract_env_fallback_blocked_on_public(monkeypatch):
+    # R1 guard: ALLOW_ENV_KEY on but request is non-localhost -> no fallback
+    monkeypatch.setattr(_config_mod, "API_KEY", "sk-" + "e" * 20, raising=False)
+    req = _FakeReq(headers={}, remote_addr="203.0.113.7")
+    assert keyauth.extract_request_key(req, allow_env=True) is None
+
+
+def test_extract_env_fallback_requires_allow_env(monkeypatch):
+    monkeypatch.setattr(_config_mod, "API_KEY", "sk-" + "e" * 20, raising=False)
+    req = _FakeReq(headers={}, remote_addr="127.0.0.1")
+    assert keyauth.extract_request_key(req, allow_env=False) is None
