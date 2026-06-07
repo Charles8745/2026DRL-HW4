@@ -18,6 +18,15 @@ export class ByokGate {
     this._onReady = null;
 
     this.form.addEventListener('submit', (e) => this._onSubmit(e));
+    // <dialog>.showModal() lets Escape fire `cancel` and close without a key,
+    // leaving a dead page (onReady wires composer + rail only on submit).
+    // Block it so the forced gate cannot be dismissed without a valid key.
+    this.dialog.addEventListener('cancel', (e) => e.preventDefault());
+    // Belt-and-suspenders: if the gate ever closes while no key is stored and we
+    // are not in demo mode, reopen it so the app can never be left non-interactive.
+    this.dialog.addEventListener('close', () => {
+      if (!this.demoMode && !this.getKey()) this.open();
+    });
   }
 
   // key getter handed to ApiClient — reads sessionStorage live each request.
