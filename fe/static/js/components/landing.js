@@ -120,3 +120,61 @@ export function mountLanding(host, onSubmit) {
 
   return { root, pillInput: input, els: { heroLayer, stage, form, chips } };
 }
+
+// prefers-reduced-motion gate（spec §3.3 / R15）。
+export function prefersReducedMotion() {
+  return typeof window !== 'undefined'
+    && window.matchMedia
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+// runSignatureMoment：序列化動態（spec §3.3）。
+//   full-motion: FLIP morph(pill→docked composer, --dur-slow) + hero stagger 淡出
+//                → morph 完成「後才」openStream → panel 立即 idle skeleton → rewrite 有界 shimmer。
+//   reduced:     不跑 morph/stagger，直接切 chat 並立即 openStream（skeleton 仍先渲）。
+// deps:
+//   landing  = mountLanding(...) 回傳物件
+//   shell    = { setView(v) } 切 data-view='landing'|'chat'（M3）
+//   panel    = { renderIdleSkeleton(), startRewriteShimmer() }（M4 PipelinePanel）
+//   openStream(text) = main.js 的 SseClient 開啟器
+export function runSignatureMoment({ landing, shell, panel, text, openStream }) {
+  const reduced = prefersReducedMotion();
+  const policy = motionPolicy(reduced);
+
+  // panel 永不空白：先同步渲 idle skeleton（spec §3.3 step 3）。
+  if (panel && panel.renderIdleSkeleton) panel.renderIdleSkeleton();
+
+  function open() {
+    if (shell && shell.setView) shell.setView('chat');
+    // rewrite 等待期：有界 active-shimmer + 誠實「思考中…」（spec §3.3 step 5 / R15）。
+    if (panel && panel.startRewriteShimmer) panel.startRewriteShimmer();
+    openStream(text);
+  }
+
+  if (!policy.morph) {
+    // reduced：立即開，不等動畫。
+    open();
+    return;
+  }
+
+  // full-motion：先 morph + hero stagger 淡出。
+  landing.root.classList.add('is-morphing');
+  landing.els.heroLayer.classList.add('is-leaving');
+
+  // morph 完成「後才」開串流（spec §3.3 step 2）。用 timeout 對齊 --dur-slow，
+  // 並以 transitionend 早收尾（兩者先到者勝、只開一次）。
+  let opened = false;
+  function openOnce() {
+    if (opened) return;
+    opened = true;
+    open();
+  }
+  const t = setTimeout(openOnce, policy.openStreamAfterMs);
+  landing.els.form.addEventListener('transitionend', function te(ev) {
+    if (ev.propertyName === 'transform' || ev.propertyName === 'border-radius') {
+      landing.els.form.removeEventListener('transitionend', te);
+      clearTimeout(t);
+      openOnce();
+    }
+  });
+}

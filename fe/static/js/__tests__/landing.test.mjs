@@ -41,3 +41,59 @@ test('liveSummary: count-driven concise zh summary', () => {
   assert.equal(liveSummary(0), '目前沒有符合條件的車輛');
   assert.equal(liveSummary(null), '已完成回覆');
 });
+
+import { runSignatureMoment } from '../components/landing.js';
+
+// 最小 fake landing/shell/panel（無真 DOM；用記錄 spy）。
+function fakeDeps(opened) {
+  const log = [];
+  const listeners = {};
+  const landing = {
+    root: { classList: { add: (c) => log.push('root+' + c) } },
+    els: {
+      heroLayer: { classList: { add: (c) => log.push('hero+' + c) } },
+      form: {
+        addEventListener: (_e, fn) => { listeners.te = fn; },
+        removeEventListener: () => {},
+      },
+    },
+  };
+  const shell = { setView: (v) => log.push('view:' + v) };
+  const panel = {
+    renderIdleSkeleton: () => log.push('skeleton'),
+    startRewriteShimmer: () => log.push('shimmer'),
+  };
+  const openStream = (t) => { log.push('open:' + t); opened.push(t); };
+  return { landing, shell, panel, openStream, log, listeners };
+}
+
+test('runSignatureMoment(reduced): skeleton first, then immediate open (no morph)', async () => {
+  // 強制 reduced：stub matchMedia。
+  globalThis.window = { matchMedia: () => ({ matches: true }) };
+  const opened = [];
+  const d = fakeDeps(opened);
+  runSignatureMoment({ landing: d.landing, shell: d.shell, panel: d.panel,
+                       text: '找車', openStream: d.openStream });
+  assert.deepEqual(d.log, ['skeleton', 'view:chat', 'shimmer', 'open:找車']);
+  assert.deepEqual(opened, ['找車']);
+  delete globalThis.window;
+});
+
+test('runSignatureMoment(full): skeleton + morph classes first, open deferred until transitionend', async () => {
+  // 強制 full-motion：matchMedia matches=false；stub timers via long delay.
+  globalThis.window = { matchMedia: () => ({ matches: false }) };
+  const opened = [];
+  const d = fakeDeps(opened);
+  runSignatureMoment({ landing: d.landing, shell: d.shell, panel: d.panel,
+                       text: '比較', openStream: d.openStream });
+  // morph 啟動但「尚未」開串流（gate 在 morph 之後）。
+  assert.deepEqual(d.log, ['skeleton', 'root+is-morphing', 'hero+is-leaving']);
+  assert.equal(opened.length, 0);
+  // 模擬 morph 完成 → transitionend(transform) → 開一次。
+  d.listeners.te({ propertyName: 'transform' });
+  assert.deepEqual(opened, ['比較']);
+  // 二次 transitionend 不重複開。
+  d.listeners.te({ propertyName: 'transform' });
+  assert.equal(opened.length, 1);
+  delete globalThis.window;
+});
