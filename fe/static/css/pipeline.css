@@ -1,20 +1,21 @@
-/* PipelinePanel stepper (M4.6). Tokens from tokens.css (M3). */
-.pp-head { display: flex; align-items: center; gap: var(--sp-2, 8px); margin-bottom: var(--sp-3, 12px); }
-.pp-title { margin: 0; font-size: var(--fs-md, 1rem); }
+/* PipelinePanel stepper (M4.6). Tokens from tokens.css (M3).
+   References var(--*) ONLY — no bare hex (§3.1 lint). */
+.pp-head { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-3); }
+.pp-title { margin: 0; font-size: var(--fs-md); color: var(--c-ink); }
 
-.pp-steps { display: flex; flex-direction: column; gap: var(--sp-2, 8px); }
-.pp-step { display: flex; align-items: center; gap: var(--sp-2, 8px); font-size: var(--fs-sm, 0.8rem); }
-.pp-step--sub { margin-left: var(--sp-4, 16px); opacity: 0.85; font-size: var(--fs-xs, 11.5px); }
+.pp-steps { display: flex; flex-direction: column; gap: var(--sp-2); }
+.pp-step { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-sm); color: var(--c-ink); }
+.pp-step--sub { margin-left: var(--sp-4); opacity: 0.85; font-size: var(--fs-xs); }
 .pp-step__dot { width: 1em; text-align: center; }
-.pp-step--active .pp-step__dot { color: var(--c-gold, #b8860b); }
-.pp-step--done .pp-step__dot { color: var(--c-green, #1d6b4f); }
-.pp-step--error .pp-step__dot { color: var(--c-danger, #b3261e); }
+.pp-step--active .pp-step__dot { color: var(--c-gold); }
+.pp-step--done .pp-step__dot { color: var(--c-green); }
+.pp-step--error .pp-step__dot { color: var(--c-danger); }
 .pp-step--idle  { opacity: 0.5; }
 .pp-step__label { flex: 1 1 auto; }
-.pp-step__time { font-family: var(--ff-mono, monospace); color: var(--c-ink-faint, #8a918b); font-size: var(--fs-xs, 11.5px); }
+.pp-step__time { font-family: var(--ff-mono); color: var(--c-ink-faint); font-size: var(--fs-xs); }
 
-.pp-json { font-size: var(--fs-xs, 11.5px); }
-.pp-json > summary { cursor: pointer; color: var(--c-ink-faint, #8a918b); }
-.pp-json pre { max-height: 240px; overflow: auto; background: var(--c-surface-2, #faf7f0); padding: var(--sp-2, 8px); border-radius: var(--r-md, 10px); white-space: pre-wrap; }
+.pp-json { font-size: var(--fs-xs); }
+.pp-json > summary { cursor: pointer; color: var(--c-ink-faint); }
+.pp-json pre { max-height: 240px; overflow: auto; background: var(--c-surface-2); color: var(--c-ink); padding: var(--sp-2); border-radius: var(--r-md); white-space: pre-wrap; }
 
-.pp-footer { display: flex; justify-content: space-between; margin-top: var(--sp-4, 16px); padding-top: var(--sp-2, 8px); border-top: 1px solid var(--c-line, #e3ddd0); font-family: var(--ff-mono, monospace); font-size: var(--fs-xs, 11.5px); color: var(--c-ink-faint, #8a918b); }
+.pp-footer { display: flex; justify-content: space-between; margin-top: var(--sp-4); padding-top: var(--sp-2); border-top: 1px solid var(--c-line); font-family: var(--ff-mono); font-size: var(--fs-xs); color: var(--c-ink-faint); }
