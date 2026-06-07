@@ -1,0 +1,11 @@
+/* Shared component styles (M4.6): IntentChip tones + generic chip/badge/button shared base. */
+.pp-intent { font-size: var(--fs-xs, 0.72rem); padding: 2px 10px; border-radius: var(--radius-pill, 999px); font-weight: 600; }
+.pp-intent--find    { background: #14402b; color: #6fae8a; }
+.pp-intent--compare { background: #1f2e44; color: #7aa6e0; }
+.pp-intent--order   { background: #3a3416; color: #d4af37; }
+.pp-intent--support { background: #3a1f2e; color: #d48aae; }
+.pp-intent--offtopic{ background: #2a2a2a; color: #9a9a9a; }
+
+/* generic button base reused by chat + panel */
+.btn { font: inherit; cursor: pointer; border: 1px solid var(--color-border, #3a3a3a); background: var(--color-surface-2, #1d1d1d); color: var(--color-text, #eee); border-radius: var(--radius-md, 8px); padding: 6px 12px; }
+.btn:hover:not(:disabled) { border-color: var(--color-gold, #d4af37); }
