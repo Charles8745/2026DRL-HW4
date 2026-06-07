@@ -4,13 +4,21 @@ import { SseFrameParser } from './sseparse.js';
 // --- ApiClient: every request carries the BYOK header. Key lives only here +
 //     sessionStorage; never written into DOM text, trace drawer, or console. ---
 export class ApiClient {
-  constructor(getKey) { this._getKey = getKey; }   // getKey: () => string|null
+  constructor(getKey) { this._getKey = getKey; this._owner = null; }   // getKey: () => string|null
 
   _headers(extra) {
     const h = { 'Content-Type': 'application/json', ...(extra || {}) };
     const key = this._getKey();
     if (key) h['X-RideButler-Key'] = key;
+    if (this._owner) h['X-RideButler-Owner'] = this._owner;   // round-trip session ownership (R7)
     return h;
+  }
+
+  // Capture the per-session ownership token the backend issues on first use of a
+  // session_id; resending it on every later request avoids 403 session_forbidden.
+  _captureOwner(res) {
+    const t = res.headers.get('X-RideButler-Owner');
+    if (t) this._owner = t;
   }
 
   async loadConfig() {
@@ -28,6 +36,7 @@ export class ApiClient {
     });
     if (res.status === 401) throw new ApiError('unauthorized', 401);
     if (!res.ok) throw new ApiError('chat_failed', res.status);
+    this._captureOwner(res);
     return res.json();
   }
 }
@@ -58,6 +67,7 @@ export class SseClient {
     if (!res.ok || !res.body) {
       return this._fallback(sessionId, message, onEvent);   // no streaming -> fallback
     }
+    this._api._captureOwner(res);   // owner header is on the stream response before the body
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
