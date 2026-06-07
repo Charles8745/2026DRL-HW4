@@ -111,3 +111,23 @@
 7. （由 sem-02 觸發）`run_handler` 對工具執行例外未捕捉會中斷整輪 → 改以錯誤結果回饋模型續推理；對 0-error 的凍結 27 題為 no-op，屬 harness「錯誤處理」元件的真實強化。
 
 **成果**：124 個離線單元測試全綠（78→124，+46）。ablation（真實 OpenAI，16 題，report §7.4）：BM25 → +向量 → +Rerank 的 recall@1 = 0.375 → 0.375 → **0.688**、recall@5 = 0.625 → 0.688 → **0.812**、MRR = 0.549 → **0.760**、nDCG = 0.501 → **0.729**；向量把候選池天花板 recall@10 由 0.688 拉到 0.812（增召回）、rerank 在固定池內提升排序精度。sem-* 端到端（§7.5）：router 1.0 / 觸發 0.75 / grounded 1.0。**無回歸**：主 27 題 router 0.889 不變、groundedness 違規 0.222→0.185（改善），新檢索工具未劫持任何結構化找車查詢。spec `0115066`、plan `db036f4`，實作分多次 commit 於 `feat/hybrid-retrieval`。
+
+## H. Robustness Eval：使用情境 / 邊緣 / 異常 / 安全（2026-06-07）
+
+**動機**：自動化驗證覆蓋不均——主 27 題只測 happy path（安全僅 1 題），邊緣／異常／安全幾無專屬資料集。新增獨立、真實 OpenAI 端到端的 robustness eval（40 題、四類各 10）+ category-aware runner，系統性量測管線健壯性並把測試查詢固化成可重用 dataset。
+
+**流程與 AI 協作**：走 brainstorming → spec → writing-plans → **subagent-driven 執行**（每 Task 一個全新 subagent，Task 間兩階段審查：spec 合規 → 程式品質）。使用者三項拍板：(1) 後端＝純真實 OpenAI eval、(2) 規模中型 ~40 題、(3) 缺口策略＝認誠測量 + 修便宜的真缺口。架構選單一資料集 + 一支 runner + per-case `expect` schema（只評估宣告的檢查；計分原語 router_label/tools/no_domain_tool/blocked/awaiting_confirmation/grounded/honest_empty/no_crash/confirmed_executed/confirmed_cancelled）。
+
+**兩階段審查攔下的真實問題（採 receiving-code-review 紀律，逐項技術裁決而非照單全收）**：
+- Task 1：審查建議把 `honest_empty` 的 `bool(data)` 改 `data is not None`——**駁回**（會使 `_ok([])`「查無」反被判定為有資料，破壞語意）；採納其文件化建議。`_ID_RE` 加 lookahead 建議**駁回**（本域 ID 固定 3 位數，該修不達目的）。
+- Task 2：採納 3 個 minor——subtype `no_insale_model`→`no_insale_listing`（XMAX 在型錄、只是無在售刈登）、守門新增 `router_label ∈ LABELS` 驗證、sec-04 補 `grounded` 對稱。
+- Task 3：審查發現 exception 路徑只對 turn-1 `expect` 記 `no_crash=False`，turn-2 崩潰會漏記，且原寫法會覆蓋已算好的 turn-1 checks → **以 `is None` 守衛改寫、同時涵蓋 `expect_turn2`**；移除未用的 `time` import。
+- Task 5：採納測試覆蓋 hygiene（每個新關鍵字補一條 unit 探針）。
+
+**量測結果（baseline，report §7.6）**：總 pass 0.75；usage .50 / edge .80 / exception .70 / **security 1.00**；router 12/12、no_crash 23/23、honest_empty 6/6、blocked 2/2、no_domain_tool 7/7。**唯一主要缺口 grounded 25/38**。
+
+**關鍵誠實發現**：逐筆診斷（throwaway script 跑失敗案例印 reply+violations）證實 `grounded` 失敗**幾乎全是計分器偽陽性**——被 flag 的 5 位數全是**里程**（15000/24000/38000），模型正確引用工具的 `mileage_km`，但共用的 `_facts_from_trace` 只白名單價格（§G 點 2、§7.5 已知此侷限）。因與凍結 27 題共用計分器，**刻意不更動**（改動牽動凍結基線、放寬以拉分等同灌水）→ 列 future work（mileage-aware 抽取）。
+
+**修便宜的真缺口**：量測顯示 sec-02/03 中文 injection 變體（印出系統提示／開發者模式／隱藏指令）**繞過關鍵字守門、僅靠模型自身拒絕**。擴充 `governance._INJECTION`（+11 變體），守門對 injection 探針攔截由 2/4→4/4（離線 governance 測試佐證）；**對資料集 pass_rate 無可見變化**（模型本就拒絕，屬縱深防禦），**零回歸**（全離線 147 綠含凍結 27 守門）。post-fix 重跑 0.725（與 0.75 同屬非決定性、非回歸），security 維持 10/10。
+
+**成果**：147 離線測試全綠（124→147，+23：scoring 13 + dataset 守門 7 + governance 3）。資料集 `eval/robustness_testset.json`（凍結 40 題）、runner `eval/robustness_eval.py`、結果 `eval/robustness_results{,_postfix}.json`。spec `2fe055d`、plan `5416c59`，實作分多次 commit 於 `feat/robustness-eval`。

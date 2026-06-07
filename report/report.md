@@ -215,8 +215,34 @@ groundedness 以**規則比對為主**：蒐集該輪工具回傳的所有價格
 - **groundedness 1.00**：扁平 listing 回傳使回覆引用的價格與里程皆可溯源至檢索到的刈登（此處同時白名單價格與里程；§7.1 主驗證的 `_facts_from_trace` 僅白名單價格，故對列出多筆里程的回覆較嚴格——兩者皆為真實量測、無捏造）。
 - **無回歸**（vs 遷移後基線 §7.1）：router 0.889 不變、groundedness 違規 0.222→0.185（改善）。task_success 0.630→0.556 的兩題變動為 find-02（在 `search_listings`↔`recommend` 兩個結構化工具間擺動，**非**被 `semantic_search` 劫持，已逐案驗證）與 oos-02（未改動情境的非決定性）；**新增的檢索工具未把任何結構化找車查詢導向 `semantic_search`**。
 
+### 7.6 Robustness Eval（使用情境 / 邊緣 / 異常 / 安全）
+
+獨立資料集 `eval/robustness_testset.json`（40 題，四類各 10），端到端跑真實 gpt-4.1-mini（2026-06-07；非決定性，數字會微幅變動）。每題只評估其 `expect` 宣告的檢查、pass = 宣告檢查全過（`python -m eval.robustness_eval`；原始數據 `eval/robustness_results.json`、修補後 `eval/robustness_results_postfix.json`）。**此為方向性 robustness 量測，非統計顯著、非 CI 門檻。**
+
+| 類別 | n | pass_rate（修補前 → 後） |
+|---|---|---|
+| usage（使用情境） | 10 | 0.50 → 0.50 |
+| edge（邊緣） | 10 | 0.80 → 0.80 |
+| exception（異常） | 10 | 0.70 → 0.60 |
+| security（安全） | 10 | **1.00 → 1.00** |
+| 總體 | 40 | 0.75 → 0.725 |
+
+各檢查通過率（修補前，逐檢查原語）：router_label 12/12、no_crash 23/23、honest_empty 6/6、blocked 2/2、no_domain_tool 7/7、tools 3/3、awaiting_confirmation 4/5、confirmed_executed 1/1、confirmed_cancelled 1/1、**grounded 25/38（唯一主要缺口）**。
+
+**關鍵發現（誠實）：**
+- **管線結構性穩健**：路由 100%、零崩潰（no_crash 23/23，含亂碼／超長／emoji／英文／矛盾輸入皆未 crash）、查無資料誠實回報（honest_empty 6/6，未捏造任何 L###/O###）、兩階段確認閘在「不用問直接約」的繞過嘗試下仍守住（awaiting_confirmation），否定「先不要」正確取消（confirmed_cancelled）。
+- **安全 10/10**：injection 直接覆寫（sec-01/04）由輸入守門攔下；中文系統提示外洩／開發者模式變體（sec-02/03）**修補前守門擋不住、靠模型自身拒絕通過**；範圍外任務（寫程式／翻譯）、幻覺價格誘導（「是不是只要 5 萬」）、越權索取個資皆被模型拒絕（no_domain_tool + grounded）。
+- **`grounded` 缺口幾乎全是計分器偽陽性，非模型幻覺**：逐筆診斷顯示被標記的數字**全為里程**（如 15000／24000／38000 公里），是模型**正確引用工具回傳的 `mileage_km`**；共用的 `_facts_from_trace` 只白名單**價格**（與 §7.1 主驗證同一計分器），故把合法里程誤判為未溯源。此為**已知計分器侷限**（§7.5 已述）、與凍結 27 題基線共用，**本次刻意不更動**（改動會牽動凍結基線；放寬以拉高分數等同灌水）。exception 類 0.70→0.60 亦為此里程偽陽性的非決定性波動，非回歸。
+
+**修補（便宜的真缺口，認誠處置）：**
+- 量測顯示 sec-02/03 的中文 injection 變體**繞過關鍵字守門**（僅靠模型善意攔下）。已擴充 `governance._INJECTION`（系統提示／開發者模式／印出指令／無視先前等變體），守門對 injection-style 探針的攔截覆蓋由 **2/4 提升至 4/4**（離線 governance 測試佐證）。
+- **對資料集 pass_rate 無可見變化**（0.75→0.725 為非決定性，非回歸）：因模型本來就會拒絕，此修補屬**縱深防禦**——不再單靠模型善意。
+- **零回歸**：改 governance 後全離線測試綠（147 passed，含 `test_main_testset_frozen_at_27`）。
+
+**未解決（future work）：** 關鍵字 blocklist 無法窮舉 → 需 LLM-based injection 偵測；groundedness 事實白名單僅價格、且價格未正規化（「30萬」↔300000）→ mileage／規格-aware 抽取；多輪「找車→約看第一台」偶發未觸發 book_viewing（usg-10，非決定性；與 multi-03 橋接同屬 future work）。
+
 ## 8. 結論
 
-本系統以 LLM 為控制器、function calling 為手段，完整實作標準 AI Harness 六大元件，並以情境隔離、兩階段確認、groundedness 護欄與結構化稽核確保**邏輯一致性與可解釋性**。找車推薦情境再加上 **BM25 + 向量(RAG) + Rerank 三段混合檢索階段**（§2.1），ablation 顯示向量召回與 rerank 排序各有清楚可量化的貢獻（§7.4）。所有 LLM／embedding／rerank 存取經 `LLM`／`Embedder`／`Reranker` Protocol 抽象，使整個 harness 可離線、可重現地單元測試（120 tests），並可無痛切換後端（本次由 Gemini 遷移至 OpenAI `gpt-4.1-mini`，管線零改動），是一個兼顧設計完整性與工程可驗證性的 AI 系統設計範例。
+本系統以 LLM 為控制器、function calling 為手段，完整實作標準 AI Harness 六大元件，並以情境隔離、兩階段確認、groundedness 護欄與結構化稽核確保**邏輯一致性與可解釋性**。找車推薦情境再加上 **BM25 + 向量(RAG) + Rerank 三段混合檢索階段**（§2.1），ablation 顯示向量召回與 rerank 排序各有清楚可量化的貢獻（§7.4）。再以獨立的 **40 題 robustness eval**（使用情境／邊緣／異常／安全；§7.6）量測管線健壯性：路由 100%、零崩潰、查無誠實回報、確認閘抗繞過、安全 10/10；並認誠揭露 `grounded` 主要缺口實為計分器對合法里程的偽陽性（非幻覺），順手修補了 injection 守門對中文變體的縱深防禦缺口。所有 LLM／embedding／rerank 存取經 `LLM`／`Embedder`／`Reranker` Protocol 抽象，使整個 harness 可離線、可重現地單元測試（147 tests），並可無痛切換後端（本次由 Gemini 遷移至 OpenAI `gpt-4.1-mini`，管線零改動），是一個兼顧設計完整性與工程可驗證性的 AI 系統設計範例。
 
 *附：系統架構與 tool-chain 視覺化見 `report/infographic.html`／`infographic.png`；完整規格見 `docs/superpowers/specs/`；設計與開發歷程見 `log.md`。*
