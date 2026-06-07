@@ -109,3 +109,32 @@ def test_cache_failure_is_not_poisoned():
     assert isinstance(v, VectorStore)
     assert good.calls == 1
     assert boom.calls == 1
+
+
+from fe import keyauth
+
+
+def test_validate_key_format():
+    assert keyauth.validate_key_format("sk-" + "a" * 20) is True
+    assert keyauth.validate_key_format(None) is False
+    assert keyauth.validate_key_format("") is False
+    assert keyauth.validate_key_format("nope-" + "a" * 20) is False   # bad prefix
+    assert keyauth.validate_key_format("sk-short") is False           # too short
+    assert keyauth.validate_key_format("sk-" + "a" * 10 + " " + "b" * 12) is False  # whitespace
+
+
+def test_redact_key_literal_and_generic():
+    key = "sk-" + "A" * 25
+    text = f"using {key} now"
+    out = keyauth.redact_key(text, key)
+    assert key not in out
+    assert "sk-***REDACTED***" in out
+    # generic pattern: a DIFFERENT sk- key (not the literal) still redacted
+    other = "sk-" + "Z9_-" * 6
+    out2 = keyauth.redact_key(f"leak {other}", None)
+    assert other not in out2
+    assert "sk-***REDACTED***" in out2
+
+
+def test_redact_key_no_key_no_change():
+    assert keyauth.redact_key("plain text", None) == "plain text"
