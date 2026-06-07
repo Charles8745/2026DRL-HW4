@@ -6,7 +6,7 @@ Pure scoring functions live at module top (offline-testable, no API). The real-A
 driver lives in main() with heavy imports inside, mirroring eval/run_eval.py so this
 module imports cheaply for unit tests.
 """
-import argparse, json, re, time
+import argparse, json, re
 
 from harness.governance import groundedness_violations
 from eval.run_eval import _facts_from_trace
@@ -122,8 +122,12 @@ def _run_case(orch, store, case) -> dict:
         row["passed"] = bool(merged) and all(merged.values())
     except Exception as e:  # one transient/non-429 failure shouldn't abort the batch
         row["error"] = str(e)[:200]
-        if "no_crash" in case.get("expect", {}):
+        # Record a no_crash failure on whichever turn never completed (checks is None),
+        # without clobbering an already-scored earlier turn.
+        if row["checks"] is None and "no_crash" in case.get("expect", {}):
             row["checks"] = {"no_crash": False}
+        if row["checks2"] is None and "no_crash" in case.get("expect_turn2", {}):
+            row["checks2"] = {"no_crash": False}
         row["passed"] = False
     return row
 
