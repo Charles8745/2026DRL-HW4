@@ -1,0 +1,59 @@
+/* fe/static/css/tokens.css — single source of truth for all design tokens.
+   Component/layout CSS MUST reference var(--*) only; NO bare hex elsewhere. */
+:root {
+  /* --- color: cream base / racing-green primary / gold scarcity --- */
+  --c-bg:        #f3efe6;   /* cream canvas */
+  --c-surface:   #ffffff;   /* white cards */
+  --c-surface-2: #faf7f0;   /* subtle raised */
+  --c-ink:       #1a1f1c;   /* near-black text */
+  --c-ink-soft:  #5b635c;   /* secondary text */
+  --c-ink-faint: #8a918b;   /* tertiary / hints */
+  --c-line:      #e3ddd0;   /* hairline borders */
+  --c-green:     #1d6b4f;   /* deep racing green (primary) */
+  --c-green-700: #155239;   /* pressed */
+  --c-green-050: #e8f1ec;   /* tinted fill */
+  --c-gold:      #b8860b;   /* GOLD — scarce: wordmark / price / done-ring / semantic badge */
+  --c-gold-050:  #f7eccb;
+  --c-amber:     #c77d10;   /* demo banner / amber key dot */
+  --c-amber-050: #fbe9cc;
+  --c-danger:    #b3261e;   /* errors / shake */
+  --c-on-green:  #f3efe6;   /* text on green rail */
+
+  /* --- type scale: 1.25 major-third, 16px base --- */
+  --ff-display: "Fraunces", Georgia, serif;
+  --ff-body:    "Noto Sans TC", system-ui, "PingFang TC", sans-serif;
+  --ff-mono:    "Space Mono", ui-monospace, "SFMono-Regular", monospace;
+  --fs-display: clamp(40px, 6vw, 68px);
+  --fs-h1:      2.441rem;   /* 39.06px */
+  --fs-h2:      1.953rem;   /* 31.25px */
+  --fs-h3:      1.563rem;   /* 25px    */
+  --fs-lg:      1.25rem;    /* 20px    */
+  --fs-md:      1rem;       /* 16px base */
+  --fs-sm:      0.8rem;     /* 12.8px  */
+  --fs-xs:      11.5px;
+  --lh-tight:   1.15;
+  --lh-body:    1.6;
+
+  /* --- spacing: 4px base --- */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 24px; --sp-6: 32px; --sp-7: 48px; --sp-8: 64px;
+
+  /* --- radius --- */
+  --r-sm: 6px; --r-md: 10px; --r-lg: 16px; --r-xl: 24px; --r-pill: 999px;
+
+  /* --- shadow --- */
+  --sh-card: 0 1px 2px rgba(26,31,28,.06), 0 6px 16px rgba(26,31,28,.08);
+  --sh-pop:  0 8px 24px rgba(26,31,28,.18), 0 2px 6px rgba(26,31,28,.12);
+
+  /* --- motion --- */
+  --ease-out:    cubic-bezier(.16, 1, .3, 1);
+  --ease-spring: cubic-bezier(.22, 1.2, .36, 1);
+  --dur-fast: 140ms; --dur: 240ms; --dur-slow: 420ms;
+
+  /* --- z-index --- */
+  --z-base: 0; --z-panel: 10; --z-rail: 20; --z-banner: 30; --z-dialog: 40;
+
+  /* --- fixed layout dims (used by layout.css) --- */
+  --rail-w:  64px;
+  --panel-w: 400px;
+}
