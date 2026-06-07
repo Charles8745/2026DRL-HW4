@@ -19,16 +19,18 @@
 
 對齊標準 AI Harness 六大元件：**Prompt / Orchestration / 核心迴圈（Context→Observe→Reason→Act）/ Tools & Skills / Memory / Security & Governance**。完整設計見 [`docs/superpowers/specs/`](docs/superpowers/specs/2026-06-05-ai-harness-motorcycle-customer-service-design.md)。
 
+> 頂層分層：`be/`（後端：harness + eval）、`de/`（資料端：data + product_dataset.csv）、`fe/`（前端：Flask app + templates/static）；`config.py`/`tests/`/`docs/`/`report/` 留根目錄。
+
 ## 專案結構
 
 | 路徑 | 說明 |
 |---|---|
 | `config.py` | 讀 `.env`（`OPENAI_API_KEY` / `OPENAI_MODEL`） |
-| `data/` | `spec_parser`（規格解析）、`catalog`（型錄＋brand/usage/specs）、`listings`/`orders`（合成）、`store`（DataStore） |
-| `harness/` | `llm`/`openai_client`、`prompts`、`rewriter`、`router`、`handlers`、`tools`、`memory`、`governance`、`orchestrator` |
-| `app.py` | Flask app factory：`GET /`、`POST /api/chat` |
-| `templates/`、`static/` | 聊天 UI + Decision Trace 側欄 |
-| `eval/` | `testset.json`（27 題）、`run_eval.py`（指標 + PASS/FAIL） |
+| `de/data/` | `spec_parser`（規格解析）、`catalog`（型錄＋brand/usage/specs）、`listings`/`orders`（合成）、`store`（DataStore） |
+| `be/harness/` | `llm`/`openai_client`、`prompts`、`rewriter`、`router`、`handlers`、`tools`、`memory`、`governance`、`orchestrator` |
+| `fe/app.py` | Flask app factory：`GET /`、`POST /api/chat` |
+| `fe/templates/`、`fe/static/` | 聊天 UI + Decision Trace 側欄 |
+| `be/eval/` | `testset.json`（27 題）、`run_eval.py`（指標 + PASS/FAIL）、robustness/retrieval/sem eval |
 | `report/` | 書面報告 + infographic |
 | `log.md` | AI 輔助設計與開發歷程 |
 
@@ -43,7 +45,7 @@ cp .env.example .env          # 填入你的 OPENAI_API_KEY（從 https://platfo
 ## 執行
 
 ```bash
-python app.py                 # 啟動 Flask，開 http://localhost:5000
+python -m fe.app                 # 啟動 Flask，開 http://localhost:5000
 ```
 範例輸入：`30萬內想要 Yamaha 跑車`，右側 Decision Trace 會即時顯示 router 判定與工具呼叫。
 
@@ -56,9 +58,9 @@ python -m pytest -q           # 78 個單元測試，全程使用 FakeLLM，不�
 ## 評估
 
 ```bash
-python -m eval.run_eval                          # 全部 27 題（需 OPENAI_API_KEY）
-python -m eval.run_eval --limit 8 --sleep 2      # 分批 8 題、每題間隔 2 秒（避開免費額度 429）
-python -m eval.run_eval --offset 8 --limit 8     # 下一批（第 9–16 題）
+python -m be.eval.run_eval                          # 全部 27 題（需 OPENAI_API_KEY）
+python -m be.eval.run_eval --limit 8 --sleep 2      # 分批 8 題、每題間隔 2 秒（避開免費額度 429）
+python -m be.eval.run_eval --offset 8 --limit 8     # 下一批（第 9–16 題）
 ```
 輸出 router 準確率 / 任務成功率 / groundedness 違規率 / 延遲 / token 與 PASS。單一題 429 不會中斷整批（記為 error 並續跑）。
 

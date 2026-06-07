@@ -36,7 +36,7 @@
 | **Memory** | session-keyed 對話歷史 + 偏好槽 |
 | **Security & Governance** | `governance.py` + orchestrator 治理鉤子 |
 
-**資料層**：型錄為**真實 33 款車**（`product_dataset.csv`，欄位 `Title/Categories/Description/Price/...`）。載入時轉成正規化 `catalog`：`brand` 由 `Categories` 解析、`usage`（sport/naked/touring/adventure/scooter/cruiser）由人工維護的 33 款對照表標註、`specs` 由 `Description`【規格】區塊容錯解析。二手 `listings` 與 `orders` 以固定 seed 合成、折舊單調並設上下限、`model` 對型錄採精確字串 join。
+**資料層**：型錄為**真實 33 款車**（`de/product_dataset.csv`，欄位 `Title/Categories/Description/Price/...`）。載入時轉成正規化 `catalog`：`brand` 由 `Categories` 解析、`usage`（sport/naked/touring/adventure/scooter/cruiser）由人工維護的 33 款對照表標註、`specs` 由 `Description`【規格】區塊容錯解析。二手 `listings` 與 `orders` 以固定 seed 合成、折舊單調並設上下限、`model` 對型錄採精確字串 join。
 
 ### 2.1 混合檢索階段（Hybrid Retrieval：BM25 + 向量 RAG + Rerank）
 
@@ -66,7 +66,7 @@
 4. **回填**：工具結果以**文字訊息（JSON）**餵回模型（provider-neutral，見 `handlers.py`）。
 5. **續推理**：模型續寫——可再 emit 下一個 tool call（單輪多次往返），或產生最終回覆。
 
-**終止條件**：模型不再 emit tool call，或達單輪工具上限 / token 預算。程式上由 `harness/handlers.py:run_handler` 實作此迴圈，`harness/llm.py` 定義 `ToolCall`/`LLMResponse` 與 `LLM` Protocol，`openai_client.py` 解析回應的 `message.tool_calls` 與 `usage.total_tokens`。
+**終止條件**：模型不再 emit tool call，或達單輪工具上限 / token 預算。程式上由 `be/harness/handlers.py:run_handler` 實作此迴圈，`be/harness/llm.py` 定義 `ToolCall`/`LLMResponse` 與 `LLM` Protocol，`openai_client.py` 解析回應的 `message.tool_calls` 與 `usage.total_tokens`。
 
 ## 4. Tools 設計（9 個，分 4 領域）
 
@@ -115,7 +115,7 @@ T4 使用者：確認 → 實際執行 book_viewing → 建立預約
 
 ## 7. Evaluation 方法
 
-自建 **27 題標註測試集**（`eval/testset.json`），分布：找車/規格/交易/售後 各 ≥5、跨步驟多工具 ≥4、out-of-scope/injection ≥3。`eval/run_eval.py` 對每指標輸出數值與 **PASS/FAIL（對門檻）**：
+自建 **27 題標註測試集**（`be/eval/testset.json`），分布：找車/規格/交易/售後 各 ≥5、跨步驟多工具 ≥4、out-of-scope/injection ≥3。`be/eval/run_eval.py` 對每指標輸出數值與 **PASS/FAIL（對門檻）**：
 
 | 面向 | 衡量方式 | 門檻 |
 |---|---|---|
@@ -130,7 +130,7 @@ groundedness 以**規則比對為主**：蒐集該輪工具回傳的所有價格
 
 **離線（主驗證）**：所有 LLM／embedding／rerank 存取經 `LLM`／`Embedder`／`Reranker` Protocol，注入 scripted `FakeLLM`／`FakeEmbedder`／`FakeReranker` → **120 個單元測試全綠**（零 API 成本、可重現），覆蓋 router／handler 工具迴圈／兩階段確認／groundedness 護欄／governance／OpenAI client 轉接層／混合檢索三段管線。
 
-**真實端到端**（backend = **OpenAI `gpt-4.1-mini`**，`temperature=0`；27 題一次跑完、0 error、108 次 API 呼叫含 4 題第二輪；`python -m eval.run_full`，原始數據見 `eval/results.json`）：
+**真實端到端**（backend = **OpenAI `gpt-4.1-mini`**，`temperature=0`；27 題一次跑完、0 error、108 次 API 呼叫含 4 題第二輪；`python -m be.eval.run_full`，原始數據見 `be/eval/results.json`）：
 
 | 指標 | 數值 | 門檻 | 判定 |
 |---|---|---|---|
@@ -187,7 +187,7 @@ groundedness 以**規則比對為主**：蒐集該輪工具回傳的所有價格
 
 ### 7.4 檢索 ablation（BM25 → +向量 → +Rerank）
 
-對 16 題自然語言語意查詢（`eval/retrieval_testset.json`；gold 限**有在售刈登**的車款、依描述/規格證據標註、每題 1–3 款）量測三段管線的逐段貢獻（真實 OpenAI `text-embedding-3-small` + `gpt-4.1-mini`，**模型層車款檢索**；`python -m eval.retrieval_eval`，原始數據 `eval/retrieval_results.json`）：
+對 16 題自然語言語意查詢（`be/eval/retrieval_testset.json`；gold 限**有在售刈登**的車款、依描述/規格證據標註、每題 1–3 款）量測三段管線的逐段貢獻（真實 OpenAI `text-embedding-3-small` + `gpt-4.1-mini`，**模型層車款檢索**；`python -m be.eval.retrieval_eval`，原始數據 `be/eval/retrieval_results.json`）：
 
 | 配置 | recall@1 | recall@3 | recall@5 | MRR@10 | nDCG@5 | recall@10（候選池天花板） |
 |---|---|---|---|---|---|---|
@@ -203,7 +203,7 @@ groundedness 以**規則比對為主**：蒐集該輪工具回傳的所有價格
 
 ### 7.5 檢索階段端到端（sem-* 案例）+ 無回歸
 
-主 27 題 testset **凍結不動**（保住 §7.1–7.3 數字，並有 `test_main_testset_frozen_at_27` 守門）；另設 4 題語意查詢 `eval/sem_testset.json` 驗證檢索階段**真的接進對話**（`python -m eval.run_sem`，`eval/sem_results.json`）：
+主 27 題 testset **凍結不動**（保住 §7.1–7.3 數字，並有 `test_main_testset_frozen_at_27` 守門）；另設 4 題語意查詢 `be/eval/sem_testset.json` 驗證檢索階段**真的接進對話**（`python -m be.eval.run_sem`，`be/eval/sem_results.json`）：
 
 | 指標 | 數值 |
 |---|---|
@@ -217,7 +217,7 @@ groundedness 以**規則比對為主**：蒐集該輪工具回傳的所有價格
 
 ### 7.6 Robustness Eval（使用情境 / 邊緣 / 異常 / 安全）
 
-獨立資料集 `eval/robustness_testset.json`（40 題，四類各 10），端到端跑真實 gpt-4.1-mini（2026-06-07；非決定性，數字會微幅變動）。每題只評估其 `expect` 宣告的檢查、pass = 宣告檢查全過（`python -m eval.robustness_eval`；原始數據 `eval/robustness_results.json`、修補後 `eval/robustness_results_postfix.json`）。**此為方向性 robustness 量測，非統計顯著、非 CI 門檻。**
+獨立資料集 `be/eval/robustness_testset.json`（40 題，四類各 10），端到端跑真實 gpt-4.1-mini（2026-06-07；非決定性，數字會微幅變動）。每題只評估其 `expect` 宣告的檢查、pass = 宣告檢查全過（`python -m be.eval.robustness_eval`；原始數據 `be/eval/robustness_results.json`、修補後 `be/eval/robustness_results_postfix.json`）。**此為方向性 robustness 量測，非統計顯著、非 CI 門檻。**
 
 | 類別 | n | pass_rate（修補前 → 後） |
 |---|---|---|

@@ -131,3 +131,13 @@
 **修便宜的真缺口**：量測顯示 sec-02/03 中文 injection 變體（印出系統提示／開發者模式／隱藏指令）**繞過關鍵字守門、僅靠模型自身拒絕**。擴充 `governance._INJECTION`（+11 變體），守門對 injection 探針攔截由 2/4→4/4（離線 governance 測試佐證）；**對資料集 pass_rate 無可見變化**（模型本就拒絕，屬縱深防禦），**零回歸**（全離線 147 綠含凍結 27 守門）。post-fix 重跑 0.725（與 0.75 同屬非決定性、非回歸），security 維持 10/10。
 
 **成果**：147 離線測試全綠（124→147，+23：scoring 13 + dataset 守門 7 + governance 3）。資料集 `eval/robustness_testset.json`（凍結 40 題）、runner `eval/robustness_eval.py`、結果 `eval/robustness_results{,_postfix}.json`。spec `2fe055d`、plan `5416c59`，實作分多次 commit 於 `feat/robustness-eval`。
+
+## I. 專案結構重組：FE / DE / BE（2026-06-07）
+
+**動機**：根目錄平鋪雜亂（harness/ eval/ data/ app.py templates/ static/ product_dataset.csv …）。依程式/資料特性分層為 `be/`（後端：harness + eval）、`de/`（資料端：data + product_dataset.csv）、`fe/`（前端：Flask app + templates/static）；meta（config.py/tests/docs/report/…）留根目錄。
+
+**流程與 AI 協作**：brainstorming → spec → **對抗式 self-review（5 讀-only 驗證 agent + 綜整）** → writing-plans → subagent-driven 執行。對抗式審查在動手前攔下 3 個 blocker：(1) `fe/app.py` 已有正確 `__main__` 且 `_build_default()` 已回傳 Flask app（原 spec 誤指示重複包裝 `create_app`）；(2) 只有 `run_full`/`robustness_eval` 有 argparse `--out`，`run_sem`/`retrieval_eval` 硬編寫入路徑；(3) `run_sem`/`retrieval_eval` 無 argparse，`--help` 會落入 `main()` 直打真實 API → 驗證改用 import-only 煙測。另修正 import 計數（128）、`robustness_results_postfix.json` 遺漏、`__pycache__` 陳舊清除等。
+
+**手法**：`git mv`（保留歷史）+ 詞界 sed 改 import 前綴（`harness→be.harness`/`eval→be.eval`/`data→de.data`/`app→fe.app`；`config` 不變）+ `"eval/"→"be/eval/"`。`conftest.py`（root 在 sys.path）、`data/catalog.py` 的 CSV 路徑（`dirname(dirname(__file__))`→`de/`）、Flask `Flask(__name__)`（templates/static 隨 app 移）皆**無需改**。進入點：`python -m fe.app`、`python -m be.eval.*`。
+
+**驗證（零行為改變）**：殘留舊前綴 import grep = 0；`python -m pytest -q` 147 passed（含凍結 27 守門）；import/Flask/runner 煙測全過。spec `b5908d7`、plan 見 `docs/superpowers/plans/2026-06-07-repo-reorg-fe-de-be.md`。
