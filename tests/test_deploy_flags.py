@@ -106,3 +106,56 @@ def test_install_log_redaction_is_idempotent():
     root = logging.getLogger()
     n = sum(isinstance(f, KeyRedactionFilter) for f in root.filters)
     assert n == 1
+
+
+def test_install_log_redaction_redacts_named_logger_through_handler():
+    """End-to-end: a key logged via a NAMED/child logger (whose record propagates
+    to the root logger's handlers) must reach the output stream REDACTED.
+
+    A filter-only control attached to the root logger does NOT cover this path —
+    root-logger filters are skipped when a child logger propagates a record — so
+    this is the test that catches the real leak (R6: scrub sk- from every log
+    line, process-wide, regardless of which logger emits it)."""
+    import io
+    from fe.keyauth import install_log_redaction
+
+    install_log_redaction()
+
+    root = logging.getLogger()
+    buf = io.StringIO()
+    handler = logging.StreamHandler(buf)
+    root.addHandler(handler)
+    prev_level = root.level
+    root.setLevel(logging.INFO)
+    try:
+        logging.getLogger("rb.boot").warning(
+            "child sk-abcdefghijklmnopqrstuvwxyz012345"
+        )
+    finally:
+        root.removeHandler(handler)
+        root.setLevel(prev_level)
+
+    out = buf.getvalue()
+    assert "sk-abcdefghijklmnopqrstuvwxyz012345" not in out
+    assert "sk-***REDACTED***" in out
+
+
+def test_install_log_redaction_is_idempotent_with_create_app():
+    """install_log_redaction() and create_app() share one R6 mechanism, so
+    mixing them must not stack a second redaction filter on the root logger."""
+    from fe.keyauth import KeyRedactionFilter, install_log_redaction
+    from fe.app import create_app
+
+    class _SS:
+        def get_or_create(self, *a, **k):
+            return (None, None)
+
+        def lock_for(self, *a, **k):
+            import threading
+            return threading.Lock()
+
+    install_log_redaction()
+    create_app(None, memory=_SS(), corpus_cache=object())
+    root = logging.getLogger()
+    n = sum(isinstance(f, KeyRedactionFilter) for f in root.filters)
+    assert n == 1

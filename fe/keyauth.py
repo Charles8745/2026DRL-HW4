@@ -118,25 +118,49 @@ def build_request_orchestrator(key: str, *, model: str, embed_model: str,
 import logging
 
 
-class KeyRedactionFilter(logging.Filter):
-    """Process-level filter: runs redact_key over every LogRecord so a key
-    can never reach stdout/stderr via a log line. Never drops records."""
+# R6 is implemented once, in fe.app, via a logging.Filter PLUS a LogRecord
+# factory. The factory is essential: a root-logger filter is only consulted for
+# records logged directly on root, so records that propagate up from a named /
+# child logger (e.g. logging.getLogger('rb.boot')) would BYPASS a filter-only
+# control and leak the key. We therefore do NOT ship a second, parallel filter
+# here; we delegate to the canonical fe.app mechanism so there is a single
+# source of truth and child-logger records are redacted too.
+#
+# These names exist as the keyauth-located entry point used by deploy wiring and
+# tests; KeyRedactionFilter is an alias of the canonical filter so the
+# idempotency check (isinstance against root.filters) sees the same type that
+# fe.app installs — calling both create_app() and install_log_redaction() never
+# double-installs. Imports are lazy because fe.app imports from this module.
 
-    def filter(self, record: logging.LogRecord) -> bool:
-        try:
-            # Render args into the message so %-substituted keys are caught,
-            # then clear args so the formatter does not re-substitute.
-            msg = record.getMessage()
-            record.msg = redact_key(msg, None)
-            record.args = None
-        except Exception:
-            pass
-        return True
+
+def _canonical():
+    from fe.app import _RedactFilter, _install_redact_filter
+    return _RedactFilter, _install_redact_filter
+
+
+class _KeyRedactionFilterMeta(type):
+    """Make `KeyRedactionFilter` an alias of fe.app._RedactFilter for both
+    isinstance() and construction, without a module-level circular import."""
+
+    def __instancecheck__(cls, obj) -> bool:
+        return isinstance(obj, _canonical()[0])
+
+    def __call__(cls, *args, **kwargs):
+        return _canonical()[0](*args, **kwargs)
+
+
+class KeyRedactionFilter(logging.Filter, metaclass=_KeyRedactionFilterMeta):
+    """Alias for the canonical fe.app redaction filter (see module note above).
+    Constructing it returns a fe.app._RedactFilter; isinstance() recognises that
+    type, so install_log_redaction() stays idempotent with create_app()."""
 
 
 def install_log_redaction() -> None:
-    """Attach a single KeyRedactionFilter to the root logger (idempotent)."""
-    root = logging.getLogger()
-    if any(isinstance(f, KeyRedactionFilter) for f in root.filters):
-        return
-    root.addFilter(KeyRedactionFilter())
+    """Install the process-level R6 redaction (idempotent).
+
+    Delegates to fe.app._install_redact_filter(), which attaches a root-logger
+    filter AND a LogRecord factory. The factory is what makes redaction hold for
+    records propagated from named / child loggers (root-logger filters are not
+    consulted on propagation), so a key can never reach stdout/stderr via a log
+    line regardless of which logger produced it."""
+    _canonical()[1]()
