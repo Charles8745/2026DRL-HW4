@@ -19,3 +19,38 @@ def _flag(name: str, default: str = "0") -> bool:
 # does NOT authorize config.API_KEY.
 ALLOW_ENV_KEY = _flag("ALLOW_ENV_KEY")
 DEMO_MODE = _flag("DEMO_MODE")
+
+# By default the .env fallback is permitted only on a localhost bind. A public
+# host (e.g. 0.0.0.0 / a routable IP) re-burns the owner's key for every
+# anonymous visitor unless this explicit override is set.
+ALLOW_ENV_KEY_PUBLIC = _flag("ALLOW_ENV_KEY_PUBLIC")
+
+_LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost", ""}
+
+
+def _is_localhost(bind_host: str) -> bool:
+    return (bind_host or "").strip().lower() in _LOCAL_HOSTS
+
+
+def env_fallback_allowed(bind_host: str) -> bool:
+    """Single decision point for whether config.API_KEY may back a request.
+    Requires ALLOW_ENV_KEY, AND (localhost bind OR explicit public override)."""
+    if not ALLOW_ENV_KEY:
+        return False
+    if _is_localhost(bind_host):
+        return True
+    return ALLOW_ENV_KEY_PUBLIC
+
+
+def boot_flag_warnings(bind_host: str) -> list[str]:
+    """Return human-readable WARNING strings for dangerous flag combos.
+    NEVER includes the key literal. Caller is responsible for logging them."""
+    warnings: list[str] = []
+    if ALLOW_ENV_KEY and API_KEY and not _is_localhost(bind_host):
+        warnings.append(
+            "DANGEROUS: ALLOW_ENV_KEY=1 with a non-empty OPENAI_API_KEY on a "
+            "public bind (%s). Every anonymous visitor will spend the owner's "
+            "key. Set ALLOW_ENV_KEY=0 for public hosts (production = BYOK only)."
+            % (bind_host or "<unset>")
+        )
+    return warnings
