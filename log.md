@@ -161,7 +161,7 @@
 - `.venv/bin/python -m pytest -q` → **240 passed**（147 既有 + 新增 SSE/BYOK/安全/部署/JS-mirror 測試），0 failed、0 真實網路（全 `Fake*`/spy）。
 - 凍結基準一字未動：27 題主 eval、40 題 robustness、`be/eval/*results*.json` 的守門（`test_testset`/`test_robustness_testset`/`test_run_eval`/`test_robustness_eval`）全綠；`git diff main` 對這些檔為空。
 - 最關鍵守門 `test_on_step_none_is_identical` 單獨重跑 PASS：六路徑回傳含 `trace.tokens` deep-equal。
-- `node --test fe/static/js/__tests__/` → 0 fail（圖片解析 33 真 catalog row + slug 規則 + 鏈序 + http→https + 鏈尾恆 placeholder；pipeline reducer active→done→error + retrieval 巢狀 + unknown→generic）。
+- `node --test 'fe/static/js/__tests__/*.test.mjs'` → 43 pass / 0 fail（注意：Node v22 上 bare-dir 形式 `node --test fe/static/js/__tests__/` 會 MODULE_NOT_FOUND，須用 glob）（圖片解析 33 真 catalog row + slug 規則 + 鏈序 + http→https + 鏈尾恆 placeholder；pipeline reducer active→done→error + retrieval 巢狀 + unknown→generic）。
 
 **手動瀏覽器 smoke（M7.3；本地 `python -m fe.app`，無 DOM 測試框架故以人工檢查點佐證）**：
 
@@ -176,4 +176,12 @@
 | a11y aria-live + 鍵盤 | 每輪簡潔 aria-live 摘要（非洗版）；動畫面板 aria-hidden；rail 有 aria-label；Tab/Enter 全可達可操作、閘開時焦點受困 | PASS。單一 polite live region `#rb-live`（`aria-live=polite` `aria-atomic=true`、視覺隱藏 SR 可讀），每輪只 `announce` 一句簡潔摘要（`找到 N 台車輛`／`目前沒有符合條件的車輛`／`已完成回覆`），串流卡片不洗版（R20）。`setPanelA11y(panel, animating=true)` 對動畫中的 PipelinePanel 設 `aria-hidden=true`＋`aria-live=off`，靜止後移除 aria-hidden（stepper 永不自播、摘要走 `#rb-live`）。`<nav class="rail" aria-label="主導覽">`＋每顆 rail 按鈕有 aria-label（新對話/對話/切換管線面板/說明/重設金鑰），裝飾 brand `aria-hidden`。閘為 `<dialog>` `showModal()`（原生焦點受困 + Esc/背景不可互動）；composer 為 `<form>`＋`<button type="submit" aria-label="送出">`，Tab 可達、Enter 送出；卡片動作為真 `<button>`，鍵盤可操作。 |
 | responsive | 三區 grid 在 375px/1440px 皆適配、無水平溢出、卡片重排 | PASS。`layout.css` `#app` `grid-template-columns: var(--rail-w) minmax(0,1fr) var(--panel-w)`＝`64px minmax(0,1fr) 400px`（tokens.css 定義 `--rail-w:64px`／`--panel-w:400px`）。`@media (max-width:1100px)` 把第三欄鉗為 `0`＋`.panel { transform: translateX(100%) }`（panel 收合滑出、rail 仍在），故 375px 窄屏單欄無水平溢出；1440px 寬屏三欄完整。listing-deck `grid-template-columns: repeat(auto-fill, minmax(260px,1fr))` 隨寬度自動重排卡片。 |
 
-**成果**：240 離線測試全綠（含凍結 27＋40 守門）＋全 JS 純邏輯套件 0 fail＋手動 smoke 8 檢查點通過。spec `docs/superpowers/specs/2026-06-07-ui-ux-redesign-sse-byok-design.md`，實作分 M0–M7 多次 commit 於 `feat/ui-ux-redesign`。
+**真實瀏覽器整合驗證（控制者親跑 Playwright/Chromium、端到端；上表 8 檢查點為 M7.3 離線+程式碼佐證，此處為控制者真實瀏覽器佐證）**：所有 M0–M7 的單元/元件/node 測試與每任務兩階段審查都綠，但整合層仍有 **4 個只有真實瀏覽器才現形的缺口**（headless 元件測試與程式碼審查皆漏），逐一以真實 app（`python -m fe.app`，demo 模式本機 .env key）驗證並修復：
+1. `main.js`（M3.7 早於 M4/M5 撰寫）**從未把** `mountLanding`／`ChatLog`／`PipelinePanel`／reducer／`runSignatureMoment` 接起來，只 dispatch 無人消費的事件 → 重寫 boot 接線（`aa8d2d2`）。
+2. `api.js` **未回送** M2.7 後端要求的 `X-RideButler-Owner` token → 多輪第二輪 403 → 加 owner-token round-trip（`5df47c9`）。
+3. `index.html`（M3.8）**漏 link** `chat/pipeline/landing/components` 四個 CSS → UI 無樣式（top-left、未置中）→ 補 link（`719be2d`）。
+4. `chat.css` 用了**不存在的 token 名**（`--color-*`/`--space-*`/`--radius-*` → fallback 到硬寫深色 `#161616`）→ 聊天區深色不符風格 C → 改回真 token（`--c-*`/`--sp-*`/`--r-*`）、亮色白卡、零裸 hex（`fe786e6`）。
+
+修復後端到端實測通過：landing（置中襯線 wordmark＋賽車綠搜尋膠囊＋4 chips＋demo banner）→ 真實查詢「30萬內 Yamaha 跑車」→ SSE 管線逐步點亮（意圖 chip「找車推薦」、真實 `tokens 1686 · 5974ms`）→ 兩張車卡載入**真實原廠照**（三層 fallback 命中 media_url）＋金色價格＋車況 badge → 多輪（點「查看規格」→ `listing_id` prefill 第 2 輪）**無 403** → user 泡泡賽車綠／bot 泡泡純白（風格 C 確認）。**教訓**：per-milestone 綠燈 ≠ 整合可用；跨里程碑的 boot-wiring／回應 header round-trip／CSS link／token 命名一致性，必須以真實瀏覽器把關。hero 浮動圖（`fe/static/img/hero/`）與自託管字型（`fe/static/fonts/`）為使用者待放的二進位檔——缺檔時優雅降級（hero 卡自隱、字型 fallback 系統字），demo 不放也可用。
+
+**成果**：240 離線測試全綠（含凍結 27＋40 守門）＋全 JS 純邏輯套件 0 fail＋手動 smoke 8 檢查點通過＋控制者真實瀏覽器端到端驗證通過（修復 4 個整合缺口）。spec `docs/superpowers/specs/2026-06-07-ui-ux-redesign-sse-byok-design.md`，實作分 M0–M7 多次 commit 於 `feat/ui-ux-redesign`。
