@@ -138,6 +138,6 @@
 
 **流程與 AI 協作**：brainstorming → spec → **對抗式 self-review（5 讀-only 驗證 agent + 綜整）** → writing-plans → subagent-driven 執行。對抗式審查在動手前攔下 3 個 blocker：(1) `fe/app.py` 已有正確 `__main__` 且 `_build_default()` 已回傳 Flask app（原 spec 誤指示重複包裝 `create_app`）；(2) 只有 `run_full`/`robustness_eval` 有 argparse `--out`，`run_sem`/`retrieval_eval` 硬編寫入路徑；(3) `run_sem`/`retrieval_eval` 無 argparse，`--help` 會落入 `main()` 直打真實 API → 驗證改用 import-only 煙測。另修正 import 計數（128）、`robustness_results_postfix.json` 遺漏、`__pycache__` 陳舊清除等。
 
-**手法**：`git mv`（保留歷史）+ 詞界 sed 改 import 前綴（`harness→be.harness`/`eval→be.eval`/`data→de.data`/`app→fe.app`；`config` 不變）+ `"eval/"→"be/eval/"`。`conftest.py`（root 在 sys.path）、`data/catalog.py` 的 CSV 路徑（`dirname(dirname(__file__))`→`de/`）、Flask `Flask(__name__)`（templates/static 隨 app 移）皆**無需改**。進入點：`python -m fe.app`、`python -m be.eval.*`。
+**手法**：`git mv`（保留歷史）+ 詞界 sed 改 import 前綴（`harness→be.harness`/`eval→be.eval`/`data→de.data`/`app→fe.app`；`config` 不變）+ `"eval/"→"be/eval/"`。`conftest.py`（root 在 sys.path）、`de/data/catalog.py` 的 CSV 路徑（`dirname(dirname(__file__))`→`de/`）、Flask `Flask(__name__)`（templates/static 隨 app 移）皆**無需改**。進入點：`python -m fe.app`、`python -m be.eval.*`。
 
 **驗證（零行為改變）**：殘留舊前綴 import grep = 0；`python -m pytest -q` 147 passed（含凍結 27 守門）；import/Flask/runner 煙測全過。spec `b5908d7`、plan 見 `docs/superpowers/plans/2026-06-07-repo-reorg-fe-de-be.md`。

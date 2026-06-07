@@ -66,7 +66,7 @@
 4. **回填**：工具結果以**文字訊息（JSON）**餵回模型（provider-neutral，見 `handlers.py`）。
 5. **續推理**：模型續寫——可再 emit 下一個 tool call（單輪多次往返），或產生最終回覆。
 
-**終止條件**：模型不再 emit tool call，或達單輪工具上限 / token 預算。程式上由 `be/harness/handlers.py:run_handler` 實作此迴圈，`be/harness/llm.py` 定義 `ToolCall`/`LLMResponse` 與 `LLM` Protocol，`openai_client.py` 解析回應的 `message.tool_calls` 與 `usage.total_tokens`。
+**終止條件**：模型不再 emit tool call，或達單輪工具上限 / token 預算。程式上由 `be/harness/handlers.py:run_handler` 實作此迴圈，`be/harness/llm.py` 定義 `ToolCall`/`LLMResponse` 與 `LLM` Protocol，`be/harness/openai_client.py` 解析回應的 `message.tool_calls` 與 `usage.total_tokens`。
 
 ## 4. Tools 設計（9 個，分 4 領域）
 
