@@ -18,6 +18,15 @@
   --c-amber-050: #fbe9cc;
   --c-danger:    #b3261e;   /* errors / shake */
   --c-on-green:  #f3efe6;   /* text on green rail */
+  --c-blue:      #2b5f8a;   /* compare accent (tinted-scheme only) */
+  --c-blue-050:  #e2edf5;
+
+  /* --- IntentChip tones (router 5-set) — tinted fill + readable ink, palette-aligned --- */
+  --c-intent-find-bg:     var(--c-green-050); --c-intent-find-fg:     var(--c-green-700);
+  --c-intent-compare-bg:  var(--c-blue-050);  --c-intent-compare-fg:  var(--c-blue);
+  --c-intent-order-bg:    var(--c-gold-050);  --c-intent-order-fg:    var(--c-gold);
+  --c-intent-support-bg:  var(--c-amber-050); --c-intent-support-fg:  var(--c-amber);
+  --c-intent-offtopic-bg: var(--c-surface-2); --c-intent-offtopic-fg: var(--c-ink-faint);
 
   /* --- type scale: 1.25 major-third, 16px base --- */
   --ff-display: "Fraunces", Georgia, serif;
