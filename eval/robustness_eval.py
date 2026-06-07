@@ -96,3 +96,87 @@ def aggregate(rows: list[dict]) -> dict:
         "by_check": by_check,
         "errors": sum(1 for r in rows if r.get("error")),
     }
+
+
+def _run_case(orch, store, case) -> dict:
+    """Run one case (one or two turns) and evaluate its declared checks.
+    Returns a row dict: {id, category, subtype, checks, checks2, passed, error}."""
+    sid = orch.memory.new_session()
+    row = {"id": case["id"], "category": case["category"], "subtype": case.get("subtype"),
+           "checks": None, "checks2": None, "passed": False, "error": None}
+    try:
+        before = (len(store.orders), len(store.tickets))
+        out = orch.process(sid, case["input"])
+        after = (len(store.orders), len(store.tickets))
+        ctx = {"user_input": case["input"],
+               "turn_delta": (after[0] - before[0], after[1] - before[1]), "errored": False}
+        row["checks"] = evaluate_expect(case["expect"], out, ctx)
+        if case.get("followup") and case.get("expect_turn2"):
+            before2 = after
+            out2 = orch.process(sid, case["followup"])
+            after2 = (len(store.orders), len(store.tickets))
+            ctx2 = {"user_input": case["followup"],
+                    "turn_delta": (after2[0] - before2[0], after2[1] - before2[1]), "errored": False}
+            row["checks2"] = evaluate_expect(case["expect_turn2"], out2, ctx2)
+        merged = {**(row["checks"] or {}), **(row["checks2"] or {})}
+        row["passed"] = bool(merged) and all(merged.values())
+    except Exception as e:  # one transient/non-429 failure shouldn't abort the batch
+        row["error"] = str(e)[:200]
+        if "no_crash" in case.get("expect", {}):
+            row["checks"] = {"no_crash": False}
+        row["passed"] = False
+    return row
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Run the RideButler robustness eval against real OpenAI.")
+    ap.add_argument("--model", default=None, help="override config.MODEL")
+    ap.add_argument("--min-interval", type=float, default=0.0, help="min seconds between API calls")
+    ap.add_argument("--offset", type=int, default=0, help="skip first N cases")
+    ap.add_argument("--limit", type=int, default=None, help="run at most N cases (smoke test)")
+    ap.add_argument("--out", default="eval/robustness_results.json")
+    args = ap.parse_args()
+
+    import config
+    from eval.run_full import ThrottledRetryClient
+    from harness.embedder import OpenAIEmbedder
+    from harness.reranker import LLMReranker
+    from harness.retrieval.retriever import HybridRetriever
+    from data.store import DataStore
+    from harness.memory import SessionStore
+    from harness.orchestrator import Orchestrator
+
+    model = args.model or config.MODEL
+    cases = json.load(open("eval/robustness_testset.json", encoding="utf-8"))
+    cases = cases[args.offset:]
+    if args.limit is not None:
+        cases = cases[:args.limit]
+
+    client = ThrottledRetryClient(model, min_interval=args.min_interval)
+    store = DataStore(seed=42)
+    store.retriever = HybridRetriever(store.catalog, OpenAIEmbedder(), LLMReranker(client))
+    orch = Orchestrator(client, store, SessionStore())
+
+    rows = []
+    for i, c in enumerate(cases):
+        row = _run_case(orch, store, c)
+        rows.append(row)
+        flag = "ERR" if row["error"] else ("ok " if row["passed"] else "x  ")
+        t2 = f" t2={json.dumps(row['checks2'], ensure_ascii=False)}" if row["checks2"] else ""
+        print(f"[{i + 1:2d}/{len(cases)}] {flag} {c['id']:9s} {c['category']:9s} "
+              f"{json.dumps(row['checks'] or {}, ensure_ascii=False)}{t2}"
+              + (f"  ({row['error']})" if row["error"] else ""), flush=True)
+        json.dump({"model": model, "rows": rows, "metrics": aggregate(rows)},
+                  open(args.out, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+
+    metrics = aggregate(rows)
+    json.dump({"model": model, "rows": rows, "metrics": metrics,
+               "api_calls": client.calls, "api_retries": client.retries},
+              open(args.out, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    print("\n=== ROBUSTNESS AGGREGATE ===")
+    print(json.dumps(metrics, ensure_ascii=False, indent=2))
+    print(f"api_calls={client.calls} retries={client.retries}")
+
+
+if __name__ == "__main__":
+    main()
