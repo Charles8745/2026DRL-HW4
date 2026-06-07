@@ -1,0 +1,47 @@
+/* ChatLog + ListingCard styling (M4). Tokens defined in tokens.css (M3). */
+
+.listing-deck {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-3, 12px);
+  margin: var(--space-3, 12px) 0;
+}
+
+.listing-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border, #2a2a2a);
+  border-radius: var(--radius-lg, 14px);
+  overflow: hidden;
+  background: var(--color-surface, #161616);
+}
+.listing-card.is-superseded { opacity: 0.55; }
+
+.listing-card__media { margin: 0; aspect-ratio: 5 / 3; background: var(--color-surface-2, #0f2a1d); }
+.listing-card__media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.listing-card__body { display: flex; flex-direction: column; gap: var(--space-2, 8px); padding: var(--space-3, 12px); }
+.listing-card__title { margin: 0; font-size: var(--fs-md, 1rem); }
+.listing-card__price { font-family: var(--font-mono, monospace); color: var(--color-gold, #d4af37); font-weight: 700; }
+.listing-card__meta { display: flex; flex-wrap: wrap; gap: var(--space-2, 8px); font-size: var(--fs-sm, 0.8rem); color: var(--color-text-dim, #9a9a9a); }
+.listing-card__chips, .listing-card__pills { display: flex; flex-wrap: wrap; gap: var(--space-1, 4px); }
+
+.badge { font-size: var(--fs-xs, 0.7rem); padding: 2px 8px; border-radius: var(--radius-pill, 999px); }
+.badge--cond-A { background: #14402b; color: #6fae8a; }
+.badge--cond-B { background: #3a3416; color: #d4af37; }
+.badge--cond-C { background: #3a2416; color: #c98a5a; }
+.chip { font-size: var(--fs-xs, 0.7rem); padding: 2px 8px; border-radius: var(--radius-pill, 999px); background: var(--color-surface-2, #222); color: var(--color-text, #ddd); }
+.chip--relax { cursor: pointer; border: 1px dashed var(--color-border, #444); background: transparent; }
+.pill { font-size: var(--fs-xs, 0.7rem); padding: 2px 8px; border-radius: var(--radius-md, 8px); background: var(--color-surface-2, #1d1d1d); color: var(--color-text-dim, #aaa); }
+
+.listing-card__snippet { font-size: var(--fs-sm, 0.8rem); color: var(--color-text-dim, #b5b5b5); margin: 0; }
+.listing-card__rank { margin-left: 6px; color: var(--color-gold, #d4af37); font-family: var(--font-mono, monospace); }
+
+.listing-card__actions { display: flex; gap: var(--space-2, 8px); margin-top: auto; flex-wrap: wrap; }
+.btn--card { flex: 1 1 auto; font-size: var(--fs-sm, 0.8rem); padding: 6px 10px; border-radius: var(--radius-md, 8px); cursor: pointer; border: 1px solid var(--color-border, #3a3a3a); background: var(--color-surface-2, #1d1d1d); color: var(--color-text, #eee); }
+.btn--card:disabled { cursor: not-allowed; opacity: 0.5; }
+
+.empty-card { padding: var(--space-4, 16px); align-items: flex-start; }
+.empty-card__title { margin: 0; color: var(--color-text, #eee); }
+.empty-card__hint { margin: 0; color: var(--color-text-dim, #9a9a9a); font-size: var(--fs-sm, 0.8rem); }
+.empty-card__relax { display: flex; gap: var(--space-2, 8px); flex-wrap: wrap; margin-top: var(--space-2, 8px); }
