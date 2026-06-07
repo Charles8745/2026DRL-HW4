@@ -22,7 +22,7 @@ def recommend(store, budget, usage=None, brand_pref=None):
     rows = sorted(r["data"], key=lambda x: x["asking_price"])
     return _ok(rows)
 
-def semantic_search(store, query, budget=None, usage=None):
+def semantic_search(store, query, budget=None, usage=None, on_substep=None):
     """Hybrid retrieval (BM25 + dense RAG + rerank) over catalog models, expanded
     to in-sale listings. Returns a FLAT list of enriched listing dicts (same shape
     as search_listings, plus match_snippet / retrieval_rank) so groundedness and
@@ -31,7 +31,7 @@ def semantic_search(store, query, budget=None, usage=None):
         cap = int(budget) if budget is not None else None    # tolerate a non-numeric LLM-supplied budget
     except (TypeError, ValueError):
         cap = None
-    models = store.retriever.retrieve(query, k=FINAL_K)
+    models = store.retriever.retrieve(query, k=FINAL_K, on_substep=on_substep)
     rows = []
     for m in models:
         if usage and m["usage"] != usage:

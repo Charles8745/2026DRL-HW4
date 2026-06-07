@@ -207,3 +207,40 @@ def test_proposed_short_circuit_emits_tool_call_and_proposed_result():
     assert tr["name"] == "book_viewing" and tr.get("proposed") is True and tr["ok"] is None
     assert ("confirm_gate", ) not in []  # confirm_gate(proposed) also present:
     assert any(et == "confirm_gate" and d["stage"] == "proposed" for et, d in ev)
+
+
+def test_semantic_path_nests_retrieval_substeps_under_tool_call():
+    o = _orch_semantic([
+        LLMResponse(text="想找通勤省油好停的速克達", total_tokens=1),
+        LLMResponse(text="找車推薦", total_tokens=1),
+        LLMResponse(tool_calls=[ToolCall("semantic_search", {"query": "通勤省油速克達"})], total_tokens=1),
+        LLMResponse(text="幫你找到幾台適合通勤的車。", total_tokens=1),
+    ])
+    sid = o.memory.new_session()
+    ev = []
+    o.process(sid, "想找通勤省油好停的車", on_step=lambda et, d: ev.append((et, d)))
+    types = [et for et, _ in ev]
+    # tool_call -> 4 retrieval substeps -> tool_result, all between route and memory
+    assert "tool_call" in types and "tool_result" in types
+    tc_i = types.index("tool_call")
+    tr_i = types.index("tool_result")
+    retr = [d for et, d in ev if et == "retrieval"]
+    assert [d["phase"] for d in retr] == ["bm25", "vector", "rrf", "rerank"]
+    # nesting: every retrieval event carries parentId == the semantic_search tool_call index
+    tc = next(d for et, d in ev if et == "tool_call")
+    assert all(d["parentId"] == tc["index"] for d in retr)
+    # ordering: retrieval substeps fall strictly between the tool_call and its tool_result
+    retr_positions = [i for i, (et, _) in enumerate(ev) if et == "retrieval"]
+    assert all(tc_i < p < tr_i for p in retr_positions)
+
+
+def test_semantic_search_flat_list_return_unchanged_with_observer():
+    """The hard invariant: semantic_search returns a FLAT enriched-row list whether
+    or not an observer is attached."""
+    from be.harness.tools import semantic_search
+    store = DataStore(seed=42)
+    store.retriever = HybridRetriever(store.catalog, FakeEmbedder(64), FakeReranker())
+    golden = semantic_search(store, "通勤省油速克達")
+    observed = semantic_search(store, "通勤省油速克達", on_substep=lambda *a: None)
+    assert golden == observed
+    assert isinstance(golden["data"], list)

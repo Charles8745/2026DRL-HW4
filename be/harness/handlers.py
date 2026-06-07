@@ -59,8 +59,18 @@ def run_handler(llm, store, domain, query, budget, on_step=None) -> dict:
             return {"reply": "（已達單輪工具呼叫上限）", "trace": trace,
                     "pending_action": None, "budget_exceeded": True, "tokens": tokens}
         _emit(on_step, "tool_call", {"name": call.name, "args": call.args, "index": index})
+        # nest hybrid-retrieval substeps under THIS semantic_search tool_call (parentId=index)
+        sub = None
+        if on_step is not None and call.name == "semantic_search":
+            def sub(et, d, _idx=index):
+                # deep-copy before forwarding so a misbehaving observer cannot reach
+                # back into the live retrieval payload (scrub invariant kept symmetric)
+                on_step(et, {**copy.deepcopy(d), "parentId": _idx})
         try:
-            result = TOOL_FUNCS[call.name](store, **call.args)
+            if call.name == "semantic_search":
+                result = TOOL_FUNCS[call.name](store, on_substep=sub, **call.args)
+            else:
+                result = TOOL_FUNCS[call.name](store, **call.args)
         except Exception as e:  # malformed tool call (e.g. missing required arg) -> feed error back, don't crash
             result = {"ok": False, "data": None, "error": f"工具執行失敗：{e}"}
         _emit(on_step, "tool_result", {"name": call.name, "index": index, "ok": result["ok"],
