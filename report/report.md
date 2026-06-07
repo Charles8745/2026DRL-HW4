@@ -128,7 +128,7 @@ groundedness 以**規則比對為主**：蒐集該輪工具回傳的所有價格
 
 ### 7.1 量測結果
 
-**離線（主驗證）**：所有 LLM／embedding／rerank 存取經 `LLM`／`Embedder`／`Reranker` Protocol，注入 scripted `FakeLLM`／`FakeEmbedder`／`FakeReranker` → **120 個單元測試全綠**（零 API 成本、可重現），覆蓋 router／handler 工具迴圈／兩階段確認／groundedness 護欄／governance／OpenAI client 轉接層／混合檢索三段管線。
+**離線（主驗證）**：所有 LLM／embedding／rerank 存取經 `LLM`／`Embedder`／`Reranker` Protocol，注入 scripted `FakeLLM`／`FakeEmbedder`／`FakeReranker` → **147 個單元測試全綠**（零 API 成本、可重現），覆蓋 router／handler 工具迴圈／兩階段確認／groundedness 護欄／governance／OpenAI client 轉接層／混合檢索三段管線。
 
 **真實端到端**（backend = **OpenAI `gpt-4.1-mini`**，`temperature=0`；27 題一次跑完、0 error、108 次 API 呼叫含 4 題第二輪；`python -m be.eval.run_full`，原始數據見 `be/eval/results.json`）：
 

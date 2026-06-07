@@ -13,7 +13,7 @@
   → ① Query Rewriter（改寫精準化、解析指代、多意圖偵測）
   → ② Intent Router（5 類意圖分類，含無工具 fallback）
   → ③ Domain Handler（該情境專屬 tool group，manual function-calling 迴圈）
-  → ④ Tools（8 個 function）→ DataStore
+  → ④ Tools（9 個 function）→ DataStore
   ⑤ Memory（session 對話 + 偏好槽）／⑥ Security & Governance（橫切）
 ```
 
@@ -52,7 +52,7 @@ python -m fe.app                 # 啟動 Flask，開 http://localhost:5000
 ## 測試
 
 ```bash
-python -m pytest -q           # 78 個單元測試，全程使用 FakeLLM，不需 API key、不花費用
+python -m pytest -q           # 147 個單元測試，全程使用 Fake*（LLM/Embedder/Reranker），不需 API key、不花費用
 ```
 
 ## 評估
