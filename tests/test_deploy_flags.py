@@ -68,3 +68,41 @@ def test_dangerous_combo_emits_warning(monkeypatch, caplog):
 def test_safe_combo_no_warning(monkeypatch):
     cfg = _reload_config(monkeypatch, ALLOW_ENV_KEY="0")
     assert cfg.boot_flag_warnings("127.0.0.1") == []
+
+
+# ---- process-level logging redaction filter --------------------------------
+
+def test_redaction_filter_scrubs_sk_in_message():
+    from fe.keyauth import KeyRedactionFilter
+
+    flt = KeyRedactionFilter()
+    rec = logging.LogRecord(
+        name="x", level=logging.INFO, pathname=__file__, lineno=1,
+        msg="leaking sk-abcdefghijklmnopqrstuvwxyz012345 here", args=(), exc_info=None,
+    )
+    assert flt.filter(rec) is True  # filter never drops records
+    assert "sk-abcdefghijklmnopqrstuvwxyz012345" not in rec.getMessage()
+    assert "sk-***REDACTED***" in rec.getMessage()
+
+
+def test_redaction_filter_scrubs_sk_in_args():
+    from fe.keyauth import KeyRedactionFilter
+
+    flt = KeyRedactionFilter()
+    rec = logging.LogRecord(
+        name="x", level=logging.INFO, pathname=__file__, lineno=1,
+        msg="key=%s", args=("sk-abcdefghijklmnopqrstuvwxyz012345",), exc_info=None,
+    )
+    flt.filter(rec)
+    assert "sk-abcdefghijklmnopqrstuvwxyz012345" not in rec.getMessage()
+    assert "sk-***REDACTED***" in rec.getMessage()
+
+
+def test_install_log_redaction_is_idempotent():
+    from fe.keyauth import KeyRedactionFilter, install_log_redaction
+
+    install_log_redaction()
+    install_log_redaction()  # second call must not double-add
+    root = logging.getLogger()
+    n = sum(isinstance(f, KeyRedactionFilter) for f in root.filters)
+    assert n == 1

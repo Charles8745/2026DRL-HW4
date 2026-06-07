@@ -113,3 +113,30 @@ def build_request_orchestrator(key: str, *, model: str, embed_model: str,
     vstore = corpus_cache.get_or_build(embed_model, doc_ids, texts, embedder)
     store.retriever = HybridRetriever(store.catalog, embedder, reranker, vstore=vstore)
     return Orchestrator(llm, store, memory)
+
+
+import logging
+
+
+class KeyRedactionFilter(logging.Filter):
+    """Process-level filter: runs redact_key over every LogRecord so a key
+    can never reach stdout/stderr via a log line. Never drops records."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            # Render args into the message so %-substituted keys are caught,
+            # then clear args so the formatter does not re-substitute.
+            msg = record.getMessage()
+            record.msg = redact_key(msg, None)
+            record.args = None
+        except Exception:
+            pass
+        return True
+
+
+def install_log_redaction() -> None:
+    """Attach a single KeyRedactionFilter to the root logger (idempotent)."""
+    root = logging.getLogger()
+    if any(isinstance(f, KeyRedactionFilter) for f in root.filters):
+        return
+    root.addFilter(KeyRedactionFilter())
