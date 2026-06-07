@@ -70,3 +70,42 @@ def test_no_vstore_kwarg_behaves_like_today():
     assert isinstance(r.vstore, VectorStore)
     out = r.retrieve("通勤", k=2)
     assert isinstance(out, list) and len(out) >= 1
+
+
+from be.harness.retrieval.corpus_cache import CorpusEmbeddingCache
+
+
+_DOC_IDS = ["A", "B"]
+_TEXTS = ["A｜X｜naked｜通勤 街車", "B｜Y｜sport｜賽道 仿賽"]
+
+
+def test_cache_embeds_once_and_returns_same_object():
+    cache = CorpusEmbeddingCache()
+    emb = _SpyEmbedder()
+    v1 = cache.get_or_build("m", _DOC_IDS, _TEXTS, emb)
+    v2 = cache.get_or_build("m", _DOC_IDS, _TEXTS, emb)
+    assert isinstance(v1, VectorStore)
+    assert v1 is v2          # cached object reused
+    assert emb.calls == 1    # embedded exactly once across 2 calls
+
+
+class _BoomEmbedder:
+    def __init__(self):
+        self.calls = 0
+
+    def embed(self, texts):
+        self.calls += 1
+        raise RuntimeError("api down")
+
+
+def test_cache_failure_is_not_poisoned():
+    cache = CorpusEmbeddingCache()
+    boom = _BoomEmbedder()
+    miss = cache.get_or_build("m", _DOC_IDS, _TEXTS, boom)
+    assert miss is None          # transient miss
+    # a subsequent valid request must succeed (cache not poisoned)
+    good = _SpyEmbedder()
+    v = cache.get_or_build("m", _DOC_IDS, _TEXTS, good)
+    assert isinstance(v, VectorStore)
+    assert good.calls == 1
+    assert boom.calls == 1
