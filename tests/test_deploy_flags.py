@@ -159,3 +159,32 @@ def test_install_log_redaction_is_idempotent_with_create_app():
     root = logging.getLogger()
     n = sum(isinstance(f, KeyRedactionFilter) for f in root.filters)
     assert n == 1
+
+
+# ---- wsgi: BYOK-aware boot without a real key ------------------------------
+
+def test_wsgi_boots_without_real_key(monkeypatch):
+    # No OPENAI_API_KEY in env: importing wsgi must still produce an app.
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    import importlib
+    import wsgi
+    importlib.reload(wsgi)
+    assert wsgi.app is not None
+
+
+def test_wsgi_app_debug_is_false(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    import importlib
+    import wsgi
+    importlib.reload(wsgi)
+    assert wsgi.app.debug is False
+
+
+def test_wsgi_is_byok_mode(monkeypatch):
+    # production must NOT carry a preset orchestrator (R1/R4/R7 enforcement lives in
+    # the BYOK branch only; a positional orchestrator would silently bypass it).
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    import importlib
+    import wsgi
+    importlib.reload(wsgi)
+    assert wsgi.app.config["ORCH"] is None
