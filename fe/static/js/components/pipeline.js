@@ -49,11 +49,11 @@ function footer(state) {
   const fin = state.steps.find((s) => s.kind === 'final');
   const tokens = fin && fin.payload && fin.payload.trace ? (fin.payload.trace.tokens || 0) : 0;
   const done = state.steps.find((s) => s.kind === 'done');
-  const ms = done && done.payload ? (done.payload.elapsed_ms || 0) : 0;
+  const ms = done && done.payload ? done.payload.elapsed_ms : null;
   const f = el('div', 'pp-footer');
   f.append(
     el('span', 'pp-footer__tokens', 'tokens ' + tokens),
-    el('span', 'pp-footer__time', ms + ' ms'),
+    el('span', 'pp-footer__time', fmtMs(ms)),
   );
   return f;
 }
