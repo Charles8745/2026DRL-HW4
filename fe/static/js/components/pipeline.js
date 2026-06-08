@@ -1,6 +1,7 @@
 // PipelinePanel renderer: DOM view over a reduced PipelineState (spec §4.3).
 // Reads state.steps (from pipelineReducer.reduceEvent). Substeps/JSON/raw-trace collapsed by default.
 import { STEP_LABELS, INTENT_META } from '../labels.js';
+import { fmtMs } from '../uiFormat.js';
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -26,7 +27,7 @@ function renderStep(step) {
   if (step.parentId) row.classList.add('pp-step--sub');
   row.appendChild(el('span', 'pp-step__dot', DOT[step.status] || '○'));
   row.appendChild(el('span', 'pp-step__label', step.label || STEP_LABELS[step.kind] || step.kind));
-  if (step.elapsedMs != null) row.appendChild(el('span', 'pp-step__time', step.elapsedMs + ' ms'));
+  if (step.elapsedMs != null) row.appendChild(el('span', 'pp-step__time', fmtMs(step.elapsedMs)));
   // collapsed payload for tool_call / retrieval / confirm_gate
   if (step.kind === 'tool_call' || step.kind === 'retrieval' || step.kind === 'confirm_gate') {
     row.appendChild(jsonDetails('詳情', step.payload));

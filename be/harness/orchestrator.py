@@ -1,5 +1,6 @@
 import copy
 import re
+import time
 from typing import Callable
 
 import config
@@ -121,14 +122,18 @@ class Orchestrator:
         self.memory.append_message(sid, "user", user_input)
 
         # 2) rewrite -> route
+        _t_rw = time.monotonic()
         rw = rewrite(self.llm, self.memory, sid, user_input)
         self._emit(on_step, "rewrite", {"rewritten_query": rw["rewritten_query"],
                                         "resolved_listing_id": rw["resolved_listing_id"],
-                                        "tokens": rw["tokens"]})
+                                        "tokens": rw["tokens"],
+                                        "elapsed_ms": (time.monotonic() - _t_rw) * 1000})
+        _t_rt = time.monotonic()
         rt = route(self.llm, rw["rewritten_query"])
         tokens = rw["tokens"] + rt["tokens"]
         label = rt["label"]
-        self._emit(on_step, "route", {"label": label, "tokens": rt["tokens"]})
+        self._emit(on_step, "route", {"label": label, "tokens": rt["tokens"],
+                                      "elapsed_ms": (time.monotonic() - _t_rt) * 1000})
 
         # multi-intent: defer a secondary booking intent until a vehicle is chosen
         if label in ("找車推薦", "規格比較") and any(c in user_input for c in _BOOKING_CUES):
@@ -136,8 +141,10 @@ class Orchestrator:
 
         # 3) fallback path (no tools)
         if label == "閒聊範圍外":
+            _t_fb = time.monotonic()
             resp = self.llm.generate(FALLBACK_SYS, [{"role": "user", "content": rw["rewritten_query"]}],
                                      tools=None, on_token=on_token)
+            _fb_elapsed = (time.monotonic() - _t_fb) * 1000
             tokens += resp.total_tokens
             reply = resp.text or "我是二手重機客服，可協助找車、比規格、查訂單與售後。"
             self.memory.append_message(sid, "assistant", reply)
@@ -145,7 +152,7 @@ class Orchestrator:
                    "trace": _scrub({"raw_input": user_input, "rewritten_query": rw["rewritten_query"],
                                     "router_label": label, "resolved_listing_id": rw["resolved_listing_id"],
                                     "steps": [], "tokens": tokens})}
-            self._emit(on_step, "fallback", {"reply_preview": reply[:80]})
+            self._emit(on_step, "fallback", {"reply_preview": reply[:80], "elapsed_ms": _fb_elapsed})
             self._emit(on_step, "memory", {"viewed_count": len(slots.get("viewed_listings") or []),
                                            "slots": {"budget": slots.get("budget"),
                                                      "brand_pref": slots.get("brand_pref"),
@@ -160,8 +167,10 @@ class Orchestrator:
         handler_query = rw["rewritten_query"]
         if rw["resolved_listing_id"]:
             handler_query += f"（指定 listing_id={rw['resolved_listing_id']}）"
+        _t_h = time.monotonic()
         out = run_handler(self.llm, self.store, label, handler_query,
                           TurnBudget(config.MAX_TOOL_CALLS_PER_TURN), on_step=on_step, on_token=on_token)
+        _handler_elapsed = (time.monotonic() - _t_h) * 1000
         tokens += out["tokens"]
 
         # remember viewed listings (ordinal resolution); auto-fill preference slots from tool args
@@ -207,5 +216,6 @@ class Orchestrator:
                                                  "pending_intent": slots.get("pending_intent")}})
         self._emit(on_step, "final", {"reply": reply, "blocked": False, "awaiting_confirmation": awaiting,
                                       "router_label": label, "resolved_listing_id": rw["resolved_listing_id"],
-                                      "tokens": tokens, "trace": ret["trace"]})
+                                      "tokens": tokens, "trace": ret["trace"],
+                                      "elapsed_ms": _handler_elapsed})
         return ret

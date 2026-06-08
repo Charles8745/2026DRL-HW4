@@ -31,8 +31,10 @@ function upsert(state, { id, kind, status, payload, parentId }) {
   if (existing) {
     existing.status = status;
     existing.payload = payload;
-    if (status === 'done' && existing.elapsedMs == null) {
-      existing.elapsedMs = Date.now() - (existing._t0 || Date.now());
+    if (status === 'done') {
+      existing.elapsedMs = (payload && payload.elapsed_ms != null)
+        ? payload.elapsed_ms
+        : (existing.elapsedMs != null ? existing.elapsedMs : Date.now() - (existing._t0 || Date.now()));
     }
     existing.label = labelFor(kind, payload);
     return state;
@@ -41,7 +43,7 @@ function upsert(state, { id, kind, status, payload, parentId }) {
     id: id || nextId(), kind, label: labelFor(kind, payload),
     status, payload, _t0: Date.now(),
   };
-  if (status === 'done') step.elapsedMs = 0;
+  if (payload && payload.elapsed_ms != null) step.elapsedMs = payload.elapsed_ms;
   if (parentId) step.parentId = parentId;
   state.steps.push(step);
   state.byId[step.id] = step;
