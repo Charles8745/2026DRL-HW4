@@ -31,7 +31,8 @@ export class ChatLog {
   // assistant bubble; optional inline deck of enriched listing rows ([] -> empty-state card).
   addAssistant(text, rows) {
     const wrap = el('div', 'msg msg--bot');
-    wrap.appendChild(el('div', 'msg__text', text));
+    const textEl = el('div', 'msg__text', text);
+    wrap.appendChild(textEl);
 
     if (Array.isArray(rows)) {
       // supersede every previous deck's actions (disable old) before showing the newest live deck
@@ -51,6 +52,18 @@ export class ChatLog {
     }
 
     this.root.appendChild(wrap);
+    this._maybeClamp(textEl);
     this._scroll();
+  }
+
+  _maybeClamp(textEl) {
+    requestAnimationFrame(() => {
+      if (textEl.scrollHeight <= textEl.clientHeight + 2) return;  // fits — no clamp
+      textEl.classList.add('msg__text--clamped');
+      const btn = el('button', 'msg__expand', '展開');
+      btn.type = 'button';
+      btn.addEventListener('click', () => { textEl.classList.remove('msg__text--clamped'); btn.remove(); });
+      textEl.after(btn);
+    });
   }
 }
