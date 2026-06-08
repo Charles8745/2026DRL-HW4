@@ -419,12 +419,12 @@ import：`import { shouldRenderDeck } from './components/deckPolicy.js';`
       if (event === 'final') {
         const trace = (data && data.trace) || {};
         const rows = shouldRenderDeck(data && data.router_label) ? extractRows(trace) : null;
-        chat.finishAssistant((data && data.reply) || '', rows);   // M3 引入；M2 暫用 addAssistant
+        chat.addAssistant((data && data.reply) || '', rows);   // M3 Task 3.4 會改為 finishAssistant
         announce(rows ? rows.length : null, document);
         captureSession(data, trace);
       }
 ```
-> 註：M3 之前 `chat.finishAssistant` 尚未存在 → M2 階段此處先用 `chat.addAssistant(...)`；M3 Task 3.4 再改為 `finishAssistant`。
+> 註：M2 此處用既有的 `chat.addAssistant(...)`（finishAssistant 到 M3 Task 3.4 才建立）。M3 Task 3.4 會把 addAssistant 重構為委派 finishAssistant，並把本處改成 `chat.finishAssistant(...)`。**本 Step 程式碼以 addAssistant 為準。**
 
 - [ ] **Step 6：真瀏覽器驗收**
 
@@ -559,9 +559,10 @@ _HANDLER_BASE = (
     "所有車款、規格、價格、車況、訂單狀態都必須來自工具回傳，不可捏造（groundedness）。"
     "查無資料就如實告知。完成後以繁體中文清楚回覆使用者。"
     "若有推薦或列出車輛，卡片會另外完整呈現規格與價格，因此你的文字回覆**僅以 1-2 句**"
-    "總結推薦理由或重點，**不要逐台重述卡片上已顯示的規格、價格、里程**。"
+    "總結推薦理由或重點，**不要逐台重述卡片上已顯示的規格與里程**（價格可自然帶到）。"
 )
 ```
+> **為何保留「價格可自然帶到」**：groundedness 計分器（`be/eval/run_eval.py:14-16`）只白名單價格。若連價格都不提，groundedness 變成「無事實可驗」的空泛通過（不誠實）。保留價格 → 仍可量測；里程（5 位數）非白名單、是已知偽陽性來源，不重述里程預期合理降低違規率。Step 1 測試斷言（`不要`+`重述`）仍成立，無需改測試。
 
 - [ ] **Step 4：跑確認通過 + 全 pytest 綠**
 
@@ -593,9 +594,9 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 .msg__expand { margin-top: var(--sp-1); background: none; border: none; color: var(--c-green); cursor: pointer; font: inherit; padding: 0; }
 ```
 
-- [ ] **Step 2：chat.js 在 finishAssistant 收尾時判斷是否 clamp**
+- [ ] **Step 2：chat.js 在訊息收尾時判斷是否 clamp**
 
-於 `finishAssistant`（Task 3.4 建立；M2 若先做則加在 `addAssistant`）設定文字後，量 `scrollHeight` 是否超過 clamp 高度，超過則加 `.msg__text--clamped` 並插入「展開」按鈕：
+**本 M2 階段**：把 `_maybeClamp(textEl)` 加到 `addAssistant` 設定文字後呼叫（finishAssistant 到 M3 Task 3.4 才建立）。M3 Task 3.4 把 addAssistant 重構為委派 finishAssistant 時，`_maybeClamp` 的呼叫會一併移進 finishAssistant（同一處）。設定文字後，量 `scrollHeight` 是否超過 clamp 高度，超過則加 `.msg__text--clamped` 並插入「展開」按鈕：
 ```js
   _maybeClamp(textEl) {
     requestAnimationFrame(() => {
@@ -731,6 +732,7 @@ class FakeLLM:
             calls.append(ToolCall(f["name"], args))
         return LLMResponse(text=("".join(parts) or None), tool_calls=calls, total_tokens=total)
 ```
+> **實作注意（保 eval 相同性 + 穩健）**：(1) 非串流與串流兩路徑的 tool_call 參數都走 `json.loads(... or "{}")`、text 都以 `"".join` 重組，確保 `test_on_step_none_is_identical` 位元相同；(2) `tc.index` 可能為 None → `frags.setdefault(...)` 前先 `if tc.index is None: continue`；(3) 只在 `delta.content` 非空才呼叫 `on_token`（工具輪通常無 content）；(4) `on_token` 例外不可中斷串流——以 `import logging; logging.warning(...)` 取代 bare `pass`；(5) `usage` 只在最後一個 chunk 出現（`include_usage`），用「最後看到的值」即可。
 
 - [ ] **Step 5：跑測試 + 全 pytest** — `python -m pytest tests/test_streaming_llm.py -q` PASS；`python -m pytest -q` 全綠。
 
@@ -799,23 +801,45 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 **Files:** Modify `be/harness/orchestrator.py:58-203`、Create `tests/test_orchestrator_streaming.py`
 
-- [ ] **Step 1：寫測試（先失敗）**
+- [ ] **Step 1：寫測試（先失敗）— 用既有 `_orch` 樣式，無 fixture 依賴**
 
-`tests/test_orchestrator_streaming.py`：
+`tests/test_orchestrator_streaming.py`（建構照 `tests/test_orchestrator_stream.py:15-16` 的 `_orch`：`Orchestrator(FakeLLM(scripted), DataStore(seed=42), SessionStore())`。一個找車輪 = rewrite→route→handler 共 3 次 `generate`（rewriter.py:5 一次、router 一次、handler 一次）；讓 handler 第一次就回文字、不呼叫工具，最終文字即會串流）：
 ```python
-# 用既有測試建 Orchestrator 的方式（參考 tests/ 內 orchestrator 測試的 fixtures）。
-# 目標：on_step 存在時，找車推薦輪會 emit ("token", {"text": ...})；on_step=None 時無任何 token。
+from de.data.store import DataStore
+from be.harness.memory import SessionStore
+from be.harness.llm import FakeLLM, LLMResponse
+from be.harness.orchestrator import Orchestrator
 
-def test_emits_token_events_when_on_step_present(make_orch_find):  # 借用既有 fixture 或自建
-    orch, sid = make_orch_find()
+
+def _orch(scripted):
+    return Orchestrator(FakeLLM(scripted), DataStore(seed=42), SessionStore())
+
+
+def test_emits_token_events_when_on_step_present():
+    o = _orch([
+        LLMResponse(text="新手通勤推薦", total_tokens=1),        # rewrite
+        LLMResponse(text="找車推薦", total_tokens=1),            # route
+        LLMResponse(text="這幾台都適合新手通勤", total_tokens=3),  # handler: 無 tool_call → 直接最終文字
+    ])
+    sid = o.memory.new_session()
     events = []
-    orch.process(sid, "推薦新手通勤車", on_step=lambda e, d: events.append((e, d)))
+    o.process(sid, "推薦新手通勤車", on_step=lambda e, d: events.append((e, d)))
     toks = [d["text"] for (e, d) in events if e == "token"]
-    assert "".join(toks)  # 有串流出文字
-```
-> 若無現成 fixture，依 `tests/` 既有 orchestrator 測試 import `FakeLLM`/`DataStore`/`Memory` 自行 scripted（router→找車推薦、handler→最終文字）。
+    assert "".join(toks) == "這幾台都適合新手通勤"   # FakeLLM 分段 on_token，拼回原文
 
-- [ ] **Step 2：跑確認失敗** — FAIL
+
+def test_no_token_when_on_step_none():
+    o = _orch([
+        LLMResponse(text="新手通勤推薦", total_tokens=1),
+        LLMResponse(text="找車推薦", total_tokens=1),
+        LLMResponse(text="這幾台都適合新手通勤", total_tokens=3),
+    ])
+    sid = o.memory.new_session()
+    out = o.process(sid, "推薦新手通勤車")   # on_step=None → 不串流、無 token
+    assert out["reply"] == "這幾台都適合新手通勤"
+```
+
+- [ ] **Step 2：跑確認失敗** — `python -m pytest tests/test_orchestrator_streaming.py -q` → FAIL
 
 - [ ] **Step 3：orchestrator 建立 on_token 並透傳**
 
@@ -836,19 +860,35 @@ handler 呼叫（line 154-155）改：
         out = run_handler(self.llm, self.store, label, handler_query,
                           TurnBudget(config.MAX_TOOL_CALLS_PER_TURN), on_step=on_step, on_token=on_token)
 ```
+> **非 SSE 路徑保持 on_step=None**：eval（`be/eval/*`）與 `/api/chat` 直呼 `orchestrator.process(...)` 不帶 on_step → on_token=None → 非串流，行為不變。只有 SSE 路徑（`fe/streaming.py` 的 StreamRunner 以 `on_step=queue.put` 呼叫）會帶 on_step。
 
-- [ ] **Step 4：驗證 on_step=None 不變（凍結守門）**
+- [ ] **Step 4：⚠️ 更新既有「精確事件序列」測試（token 是新事件，會插進序列）**
 
-```bash
-python -m pytest -q -k "on_step_none or identical or observab"   # test_on_step_none_is_identical 必過
-python -m pytest -q                                              # 全綠
+加 on_token 後，`tests/test_orchestrator_stream.py` 內**對精確事件序列做斷言**的測試會看到新的 `token` 事件而失敗——這些是我們自己的測試，誠實更新：序列斷言改成「先濾掉 token 再比對」，並另外正向斷言有 token。已知會中招（實作時 grep `types == [` 再全部掃過）：
+- `test_fallback_path_event_sequence`（約 line 170-173）：fallback 的 generate 串流 → token 落在 route 與 fallback 之間。
+- `test_recommend_path_emits_tool_call_then_tool_result`（約 line 177-180）：handler 最終文字串流 → token 落在 tool_result 與 memory 之間。
+- 同檔其他 `types == [...]` 精確比對的路徑測試（semantic 等）一併掃。
+
+改法（每處把取 types 那行改為濾 token，並加一行正向斷言）：
+```python
+    types = [et for et, _ in events if et != "token"]   # token 是 streaming 文字事件，與階段序列正交
+    assert types == ["guard", "rewrite", "route", "tool_call", "tool_result", "memory", "final"]
+    assert any(et == "token" for et, _ in events)        # 會產生文字的路徑：確有串流出 token
 ```
-> `on_step=None → on_token=None → generate 非串流 → 位元相同`。
+> guard-only / pending-confirm（純確認、無 generate 文字）路徑無 token，那些測試不必動。`test_on_step_none_is_identical` 也不必動（on_step=None 無 token）。
 
-- [ ] **Step 5：commit**
+- [ ] **Step 5：驗證 on_step=None 位元相同（凍結守門）+ 全綠**
 
 ```bash
-git add be/harness/orchestrator.py tests/test_orchestrator_streaming.py
+python -m pytest tests/test_orchestrator_stream.py::test_on_step_none_is_identical -q   # 必過（on_step=None → on_token=None → 非串流 → 位元相同）
+python -m pytest tests/test_orchestrator_streaming.py -q                                # 新測試 PASS
+python -m pytest -q                                                                     # 全綠（含上面更新後的序列測試）
+```
+
+- [ ] **Step 6：commit**
+
+```bash
+git add be/harness/orchestrator.py tests/test_orchestrator_streaming.py tests/test_orchestrator_stream.py
 git -c user.name="Charles" -c user.email="charles@j-tcg.com" commit -m "feat(m3): orchestrator emits token events on SSE path (on_step=None unchanged)
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
@@ -1018,7 +1058,7 @@ export class SseClient {
 - [ ] **Step 2：main.js 串流狀態 + 停止鈕**
 
 import：`import { isSubmitKey, composerState } from './composerKeys.js';`
-新增套用函式 + 在 stream 起訖切換狀態。於 `wireComposer` 與 `openStream` 範圍可見處加：
+新增套用函式 + 在 stream 起訖切換狀態。**宣告位置**：把 `let streaming = false;` 與 `function setStreaming(on){...}` 放在 `main()` body 內、緊接 `let pstate = null;`（約 line 77）之後、且在 `wireComposer`/`openStream` 定義之前——兩者皆為 `main()` 內的巢狀函式，故能共用此閉包變數：
 ```js
   let streaming = false;
   function setStreaming(on) {
@@ -1113,10 +1153,11 @@ export function shouldShowConfirm(finalData) {
     yes.addEventListener('click', () => { done(); onConfirm(); });
     no.addEventListener('click',  () => { done(); onCancel(); });
     wrap.append(yes, no);
-    (this.root.lastElementChild || this.root).appendChild(wrap);
+    this.root.appendChild(wrap);   // 直接掛在 .chatlog（flex 容器）下，align-self 才生效
     this._scroll();
   }
 ```
+> ⚠️ **務必 append 到 `this.root`（即 `.chatlog`）**，不要 append 到 `lastElementChild`（會塞進 bot 泡泡內部，使 CSS `.msg-confirm{align-self:flex-start}` 失效）。`.msg-confirm` 是 chatlog 的直接 flex 子層。
 `main.js` import `shouldShowConfirm`；在 `final` 收尾後：
 ```js
         if (shouldShowConfirm(data)) {
@@ -1187,7 +1228,7 @@ export function fmtMs(ms) {
                                         "tokens": rw["tokens"],
                                         "elapsed_ms": (time.monotonic() - _t) * 1000})
 ```
-route / 各 final 同法（route 量 route() 周圍；handler/fallback 量該段周圍，可把耗時放進 `memory` 或 `final` event 的 data）。`guard`/`memory` 這類瞬時階段不放（FE 以 `fmtMs` 顯示 `<1 ms`）。
+**明確哪些階段帶 `elapsed_ms`**：`rewrite`（量 `rewrite()` 周圍，orchestrator 約 line 116）、`route`（量 `route()` 周圍，約 line 120）、`handler`/`fallback`（量 `run_handler()`/fallback `generate()` 周圍，把耗時放進該路徑 `final` event 的 data）。`guard`、`memory`、`token` 等瞬時/串流事件**不帶** `elapsed_ms` → reducer 不設 `elapsedMs` → `pipeline.js` 不渲染時間（**顯示空白，非 `<1 ms`**）。`<1 ms` 只出現在「有量到但 <1ms」的階段（FakeLLM 下 rewrite/route 即如此）。
 
 - [ ] **Step 4：reducer 採用後端 elapsed_ms（移除假 0）**
 
@@ -1296,11 +1337,11 @@ python -m be.eval.robustness_eval  # 40 題 → be/eval/robustness_results.json
 
 - [ ] **Step 2：比對 prompt 變更前後**
 
-特別檢查 groundedness 違規率（`_facts_from_trace` 只白名單價格；prose 不再重述價格/里程，違規率預期持平或下降）與 task_success。若 groundedness 意外惡化，退回較溫和措辭（保留價格、只砍規格重述）並重跑。
+先記 baseline（變更前的 groundedness 違規率）。重跑後：prose 不再重述**里程**（已知偽陽性來源）、但**價格仍可述**（維持 groundedness 可量測），違規率預期持平或下降。**量化退回門檻**：若違規率較 baseline **上升 > 5 個百分點** → 停、`git checkout be/harness/prompts.py` 退回原文、log 記「嘗試精簡 prompt，違規 +X pp，已退回」；否則接受新數字。並檢查 task_success 無明顯回歸。
 
 - [ ] **Step 3：誠實更新 report §7 + log 新增一節**
 
-report §7.1–7.6 換成新數字；log 新增「§K UI 操作優化 + eval 重跑」記錄：本輪 M0–M4 內容、prompt 變更、eval 前後差異與解讀（不灌水）。
+report 各節對應：**§7.1–7.3 = run_full（主 27 題：router/task/groundedness/multiturn）**、**§7.4 = retrieval_eval**、**§7.5 = run_sem**、**§7.6 = robustness_eval**——逐節換成新數字。log 新增「§K UI 操作優化 + eval 重跑」記錄：本輪 M0–M4 內容、prompt 變更、各 eval 前後差異與解讀（不灌水）。
 
 - [ ] **Step 4：commit**
 

@@ -48,7 +48,7 @@
 **根因**：`fe/static/css/layout.css:5-11` 的 `#app` 是 `height:100vh; overflow:hidden` 的 grid；`.center`(`:15`) 與 `.view-chat`(`:27`) 是 flex column 且 `min-height:0`，但 `.chatlog` **完全沒有 flex/overflow 規則**（`fe/templates/index.html:68-70` 只有 class，CSS 無對應 rule）→ 內容溢出但無人提供捲動。
 
 **改動**：
-- `layout.css` 新增：`.chatlog { flex: 1 1 auto; min-height: 0; overflow-y: auto; }`
+- `layout.css` 新增：`.chatlog { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-4); }`（`display:flex` + `gap` + `padding` 一併在 M0 加上：M1 Task 1.2 的訊息泡泡靠 `align-self` 左右對齊，需父層是 flex 容器；間距/內距也讓 M0 當下就可讀）。
 - `.composer { flex: 0 0 auto; }`（釘成底部固定列、不被壓縮、不隨內容捲走；視覺上 `border-top` + surface 背景與 chatlog 區隔）。
 - `fe/static/js/components/chat.js` 的 `_scroll()`：確認對 `.chatlog`（現在才是 scroller）做 `scrollTop = scrollHeight`；若原本指錯元素則修正。
 
@@ -75,10 +75,13 @@
 
 1. **意圖 gating（FE-only）** — `fe/static/js/main.js:21-36`(`extractRows`)/`:92-95`(`final` 處理)：只有 `data.router_label ∈ {找車推薦, 規格比較}` 才取 rows 傳 deck，其餘傳 `null` → 不渲染車卡。`router_label` 已在 `final` event（`orchestrator.py:199-201`）。抽 `shouldRenderDeck(label)` 純函式測試。
 2. **前 6 張 + 顯示更多（FE-only）** — `fe/static/js/components/listingCard.js:129-139`(`renderDeck`) 加 `maxShown=6`：前 6 張顯示、其餘收在「顯示更多（N）」按鈕後。抽 `splitDeck(rows, n)→{shown,hidden}` 純函式測試。
-3. **prompt 精簡（動後端，影響 eval）** — `be/harness/prompts.py:13-24` 的 `_HANDLER_BASE`/找車推薦 hint 加指引：「若有推薦車輛，僅以 1–2 句總結選擇理由，**不要逐台重述卡片上已顯示的規格/價格/里程**」。加 Python 斷言 `handler_sys('找車推薦')` 含此指引。
+3. **prompt 精簡（動後端，影響 eval）** — `be/harness/prompts.py:13-24` 的 `_HANDLER_BASE`/找車推薦 hint 加指引：「若有推薦車輛，僅以 1–2 句總結選擇理由，**不要逐台重述卡片上已顯示的規格與里程**（價格可自然帶到）」。加 Python 斷言 `handler_sys('找車推薦')` 含此指引。
 4. **prose 安全收合（FE-only）** — prose 過長（> ~6 行）時 clamp + 「展開」。即使 prompt 已精簡仍保險。
 
-**eval 風險與對策**：prompt 改可能動 groundedness（`_facts_from_trace` 白名單價格）。→ 改完先量 before/after；prose 引用更少事實，違規率預期持平或下降；若意外惡化，退回較溫和措辭（保留價格、只砍規格重述）。全部誠實記錄。
+**eval 風險與對策**：groundedness 計分器（`be/eval/run_eval.py:14-16` `_facts_from_trace`）**只白名單價格**。因此：
+- **刻意保留「價格可自然帶到」**：若叫模型連價格都不提，groundedness 會變成「無事實可驗」的空泛通過（等於不誠實拉高分數）；保留價格 → groundedness 仍實際量測價格 grounding。
+- **叫模型別重述里程**：里程（5 位數）非白名單、是**已知偽陽性來源**（現況里程會被誤判違規），不重述里程預期**降低違規率（合理、非灌水）**。
+- **量化退回門檻**：改完先量 baseline → 重跑。若 groundedness 違規率較 baseline **上升 > 5 個百分點**：停、退回 prompts.py 原文、log 記「嘗試精簡 prompt，違規上升 X%，已退回」。否則接受新數字並更新 report/log。全部誠實記錄。
 
 **驗收**：找車 → 1–2 句摘要 + 6 張卡 + 顯示更多；約看/確認/閒聊 → 無車卡；eval 重跑數字入 report/log。
 
