@@ -88,6 +88,11 @@
 .listing-deck__more[hidden] { display: none; }
 .listing-deck__more-btn { justify-self: start; margin-top: var(--sp-2); }
 
+/* --- Confirm/Cancel quick-reply buttons --- */
+.msg-confirm { display: flex; gap: var(--sp-2); align-self: flex-start; margin-top: calc(var(--sp-2) * -1); }
+.msg-confirm__yes { border-color: var(--c-green); color: var(--c-green); }
+.msg-confirm__no  { color: var(--c-ink-soft); }
+
 /* --- Prose clamp (long assistant text) --- */
 .msg__text--clamped { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
 .msg__expand { margin-top: var(--sp-1); background: none; border: none; color: var(--c-green); cursor: pointer; font: inherit; padding: 0; }

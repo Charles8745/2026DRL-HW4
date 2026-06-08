@@ -72,6 +72,18 @@ export class ChatLog {
   // one-shot (non-stream fallback / blocked / guard paths)
   addAssistant(text, rows) { this.finishAssistant(text, rows); }
 
+  addConfirmActions(onConfirm, onCancel) {
+    const wrap = el('div', 'msg-confirm');
+    const yes = el('button', 'btn msg-confirm__yes', '確認'); yes.type = 'button';
+    const no  = el('button', 'btn msg-confirm__no', '取消');  no.type = 'button';
+    const done = () => wrap.remove();
+    yes.addEventListener('click', () => { done(); onConfirm(); });
+    no.addEventListener('click',  () => { done(); onCancel(); });
+    wrap.append(yes, no);
+    this.root.appendChild(wrap);   // 直接掛在 .chatlog（flex 容器）下，align-self 才生效
+    this._scroll();
+  }
+
   _maybeClamp(textEl) {
     requestAnimationFrame(() => {
       if (textEl.scrollHeight <= textEl.clientHeight + 2) return;  // fits — no clamp

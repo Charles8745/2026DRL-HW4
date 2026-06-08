@@ -16,6 +16,7 @@ import { ChatLog } from './components/chat.js';
 import { PipelinePanel } from './components/pipeline.js';
 import { initState, reduceEvent } from './components/pipelineReducer.js';
 import { shouldRenderDeck } from './components/deckPolicy.js';
+import { shouldShowConfirm } from './uiFormat.js';
 
 // extractRows(trace): the inline deck for an assistant bubble. Scan trace.steps and
 // keep the LAST listing-bearing tool_result.data (search_listings/recommend/
@@ -115,6 +116,9 @@ async function main() {
         chat.finishAssistant((data && data.reply) || '', rows);
         announce(rows ? rows.length : null, document);
         captureSession(data, trace);
+        if (shouldShowConfirm(data)) {
+          chat.addConfirmActions(() => runTurn('確認'), () => runTurn('取消'));
+        }
         setStreaming(false);
       }
       if (event === 'done') {
