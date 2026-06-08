@@ -1,5 +1,16 @@
 # 🏍️ RideButler 騎士管家 — 二手重機交易平台 AI 客服 Harness
 
+## 🔴 線上 Demo（Live Demo）
+
+### 👉 [https://ridebutler.onrender.com](https://ridebutler.onrender.com)
+
+**怎麼用（自帶金鑰 BYOK）**：開啟後會跳出金鑰閘 → 貼上你**自己的 OpenAI API key**（[從這裡取得](https://platform.openai.com/api-keys)）→ 送出 → 例如輸入「**30萬內想要 Yamaha 跑車，幫我推薦**」，中央會渲染車款卡片、右側即時串流整條決策管線。
+
+- 🔒 **金鑰只走 HTTP header、每請求獨立，不入 body／trace／log**；主機端不存任何 key（你的額度不會被別人用到）。
+- ⏱️ 免費實例閒置會休眠，**第一次載入等 ~30–60 秒喚醒屬正常**，之後即順暢。
+
+---
+
 > **2026 Deep Reinforcement Learning — Homework 4（AI Harness Systems Design）**
 >
 > 以大型語言模型（OpenAI `gpt-4.1-mini`）作為**系統控制器**，透過 **function calling** 串接平台資料與工具，端到端處理買家的多步驟客服請求。本文件重點在 **system design 思維** ——*AI 如何進行 tool use 與 decision-making* ——而非模型訓練或演算法推導。

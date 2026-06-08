@@ -9,7 +9,7 @@ services:
     numInstances: 1          # single instance: process-memory state must not split
     healthCheckPath: /
     dockerfilePath: ./Dockerfile
-    autoDeploy: false
+    autoDeploy: true          # push to main → auto re-deploy
     envVars:
       - key: DEMO_MODE
         value: "0"
