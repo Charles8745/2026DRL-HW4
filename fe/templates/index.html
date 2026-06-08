@@ -69,10 +69,10 @@
         <div data-chatlog class="chatlog" aria-live="polite"></div>
       </section>
 
-      <!-- composer is shared by landing pill (M5) and chat view -->
+      <!-- composer is shared by landing pill (hidden on landing) and chat view -->
       <form data-composer class="composer">
-        <input data-composer-input class="composer__input" autocomplete="off"
-               placeholder="例如：30萬內想要 Yamaha 跑車">
+        <textarea data-composer-input class="composer__input" rows="1" autocomplete="off"
+                  placeholder="輸入訊息，Enter 送出、Shift+Enter 換行"></textarea>
         <button type="submit" class="composer__send" aria-label="送出">送出</button>
       </form>
     </main>

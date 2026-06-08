@@ -7,6 +7,7 @@
 //   -> mount ChatLog + PipelinePanel(+adapter) + landing -> wire composer/rail.
 import { ApiClient, SseClient, ApiError } from './api.js';
 import { ByokGate } from './components/byok.js';
+import { isSubmitKey } from './composerKeys.js';
 import {
   mountLanding, runSignatureMoment,
   ensureLiveRegion, announce, setPanelA11y,
@@ -137,11 +138,17 @@ async function main() {
     if (!form || !input) return;
     if (form.dataset.bound === '1') return;
     form.dataset.bound = '1';
+    const autosize = () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 160) + 'px'; };
+    input.addEventListener('input', autosize);
+    input.addEventListener('keydown', (e) => {
+      if (isSubmitKey(e)) { e.preventDefault(); form.requestSubmit(); }
+    });
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const text = input.value;
-      input.value = '';
+      input.value = ''; autosize();
       runTurn(text);
+      input.focus();                 // keep focus on the composer for the next message
     });
   }
 
