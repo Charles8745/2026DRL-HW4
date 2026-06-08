@@ -65,6 +65,7 @@ function keyFor(state, etype, data) {
 
 export function reduceEvent(state, { etype, data }) {
   data = data || {};
+  if (etype === 'token') return state;   // streamed reply text is rendered by ChatLog, not the pipeline
 
   // terminal error
   if (etype === 'error') {

@@ -89,12 +89,13 @@ async function main() {
     setPanelA11y(panelRoot, true);
     pstate = initState('t' + turnSeq);
     return sse.stream(window.__rb.sessionId, text, (event, data) => {
+      if (event === 'token') { chat.appendToken((data && data.text) || ''); return; }
       pstate = reduceEvent(pstate, { etype: event, data });
       panelView.render(pstate);
       if (event === 'final') {
         const trace = (data && data.trace) || {};
         const rows = shouldRenderDeck(data && data.router_label) ? extractRows(trace) : null;
-        chat.addAssistant((data && data.reply) || '', rows);   // M3 Task 3.4 會改為 finishAssistant
+        chat.finishAssistant((data && data.reply) || '', rows);
         announce(rows ? rows.length : null, document);
         captureSession(data, trace);
       }

@@ -28,33 +28,47 @@ export class ChatLog {
     this._scroll();
   }
 
-  // assistant bubble; optional inline deck of enriched listing rows ([] -> empty-state card).
-  addAssistant(text, rows) {
-    const wrap = el('div', 'msg msg--bot');
-    const textEl = el('div', 'msg__text', text);
-    wrap.appendChild(textEl);
-
-    if (Array.isArray(rows)) {
-      // supersede every previous deck's actions (disable old) before showing the newest live deck
-      for (const old of this._decks) {
-        old.classList.add('is-superseded');
-        old.querySelectorAll('button.btn--card').forEach((b) => { b.disabled = true; b.title = '此卡為舊結果，請使用最新清單'; });
-      }
-      const deck = renderDeck(rows, this.mediaMap, this.onAction, { superseded: false });
-      wrap.appendChild(deck);
-      this._decks.push(deck);
-
-      // aria-live honest summary (zero-result must be spoken)
-      const summary = rows.length === 0
-        ? '查無符合條件的車輛。'
-        : `找到 ${rows.length} 台車輛。`;
-      if (this.liveEl) this.liveEl.textContent = summary;
+  // attach an inline deck of enriched listing rows ([] -> empty-state card) to a bubble,
+  // superseding every previous deck's actions first; speak an aria-live honest summary.
+  _attachDeck(wrap, rows) {
+    if (!Array.isArray(rows)) return;
+    for (const old of this._decks) {
+      old.classList.add('is-superseded');
+      old.querySelectorAll('button.btn--card').forEach((b) => { b.disabled = true; b.title = '此卡為舊結果，請使用最新清單'; });
     }
+    const deck = renderDeck(rows, this.mediaMap, this.onAction, { superseded: false });
+    wrap.appendChild(deck);
+    this._decks.push(deck);
+    const summary = rows.length === 0 ? '查無符合條件的車輛。' : `找到 ${rows.length} 台車輛。`;
+    if (this.liveEl) this.liveEl.textContent = summary;
+  }
 
-    this.root.appendChild(wrap);
-    this._maybeClamp(textEl);
+  beginAssistant() {
+    this._cur = el('div', 'msg msg--bot');
+    this._curText = el('div', 'msg__text', '');
+    this._cur.appendChild(this._curText);
+    this.root.appendChild(this._cur);
     this._scroll();
   }
+
+  appendToken(t) {
+    if (!this._cur) this.beginAssistant();
+    this._curText.textContent += t;
+    this._scroll();
+  }
+
+  // finalize the (possibly streamed) bubble: authoritative text + optional deck.
+  finishAssistant(text, rows) {
+    if (!this._cur) this.beginAssistant();
+    this._curText.textContent = text;          // replace streamed text with the source-of-truth reply
+    this._attachDeck(this._cur, rows);
+    this._maybeClamp(this._curText);           // M2 Task 2.4
+    this._cur = null; this._curText = null;
+    this._scroll();
+  }
+
+  // one-shot (non-stream fallback / blocked / guard paths)
+  addAssistant(text, rows) { this.finishAssistant(text, rows); }
 
   _maybeClamp(textEl) {
     requestAnimationFrame(() => {
