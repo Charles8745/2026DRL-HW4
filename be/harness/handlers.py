@@ -36,12 +36,12 @@ def _emit(on_step, etype, data):
         pass
 
 
-def run_handler(llm, store, domain, query, budget, on_step=None) -> dict:
+def run_handler(llm, store, domain, query, budget, on_step=None, on_token=None) -> dict:
     schemas = schemas_for(domain)
     messages = [{"role": "user", "content": query}]
     trace, tokens = [], 0
     while True:
-        resp = llm.generate(handler_sys(domain), messages, tools=schemas)
+        resp = llm.generate(handler_sys(domain), messages, tools=schemas, on_token=on_token)
         tokens += resp.total_tokens
         if not resp.tool_calls:
             return {"reply": resp.text or "", "trace": trace,
