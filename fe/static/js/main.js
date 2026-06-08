@@ -7,7 +7,7 @@
 //   -> mount ChatLog + PipelinePanel(+adapter) + landing -> wire composer/rail.
 import { ApiClient, SseClient, ApiError } from './api.js';
 import { ByokGate } from './components/byok.js';
-import { isSubmitKey } from './composerKeys.js';
+import { isSubmitKey, composerState } from './composerKeys.js';
 import {
   mountLanding, runSignatureMoment,
   ensureLiveRegion, announce, setPanelA11y,
@@ -78,6 +78,22 @@ async function main() {
   let turnSeq = 0;
   let pstate = null;
 
+  // streaming state: disable the textarea + flip send -> stop while a turn streams.
+  // Declared here (after pstate, before wireComposer/openStream) so both nested
+  // functions share this closure variable.
+  let streaming = false;
+  function setStreaming(on) {
+    streaming = on;
+    const form  = document.querySelector('[data-composer]');
+    const input = document.querySelector('[data-composer-input]');
+    const send  = document.querySelector('.composer__send');
+    if (!form || !input || !send) return;
+    const st = composerState(on);
+    input.disabled = st.disabled;
+    send.textContent = st.sendLabel;
+    form.classList.toggle('composer--streaming', st.stop);
+  }
+
   // capture session id from done/final so the 2nd+ turn reuses the same session
   function captureSession(data, trace) {
     const sid = (data && data.session_id) || (trace && trace.session_id);
@@ -87,6 +103,7 @@ async function main() {
   // 6) openStream: drive the pipeline reducer + chat from SSE frames.
   function openStream(text) {
     setPanelA11y(panelRoot, true);
+    setStreaming(true);
     pstate = initState('t' + turnSeq);
     return sse.stream(window.__rb.sessionId, text, (event, data) => {
       if (event === 'token') { chat.appendToken((data && data.text) || ''); return; }
@@ -98,12 +115,15 @@ async function main() {
         chat.finishAssistant((data && data.reply) || '', rows);
         announce(rows ? rows.length : null, document);
         captureSession(data, trace);
+        setStreaming(false);
       }
       if (event === 'done') {
         captureSession(data, {});
         setPanelA11y(panelRoot, false);
+        setStreaming(false);
       }
     }).catch((err) => {
+      setStreaming(false);
       if (err instanceof ApiError && err.status === 401) { gate.onUnauthorized(); return; }
       setPanelA11y(panelRoot, false);
       pstate = reduceEvent(pstate, { etype: 'error', data: { message: '串流發生問題，請重試', where: 'client' } });
@@ -147,6 +167,7 @@ async function main() {
     });
     form.addEventListener('submit', (e) => {
       e.preventDefault();
+      if (streaming) { sse.abort(); setStreaming(false); return; }   // 送出鈕在串流中＝停止
       const text = input.value;
       input.value = ''; autosize();
       runTurn(text);

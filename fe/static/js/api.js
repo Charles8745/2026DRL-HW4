@@ -49,18 +49,23 @@ export class ApiError extends Error {
 //     invokes onEvent(event, data) per frame. Falls back to ApiClient.chat()
 //     (non-stream) on unsupported body/stream or network refusal. ---
 export class SseClient {
-  constructor(apiClient) { this._api = apiClient; }
+  constructor(apiClient) { this._api = apiClient; this._ctrl = null; }
+
+  abort() { try { this._ctrl && this._ctrl.abort(); } catch { /* noop */ } }
 
   // onEvent: (eventType, data) => void. Resolves when 'done' (or stream end) reached.
   async stream(sessionId, message, onEvent) {
+    this._ctrl = new AbortController();
     let res;
     try {
       res = await fetch('/api/chat/stream', {
         method: 'POST',
         headers: this._api._headers({ Accept: 'text/event-stream' }),
         body: JSON.stringify({ session_id: sessionId, message }),
+        signal: this._ctrl.signal,
       });
     } catch (e) {
+      if (e && e.name === 'AbortError') return;     // user stopped before headers
       return this._fallback(sessionId, message, onEvent);   // network/refused
     }
     if (res.status === 401) throw new ApiError('unauthorized', 401);
@@ -79,8 +84,11 @@ export class SseClient {
         const frames = parser.push(decoder.decode(value, { stream: true }));
         for (const f of frames) onEvent(f.event, f.data);
       }
+    } catch (e) {
+      if (!(e && e.name === 'AbortError')) throw e;  // abort = clean stop, swallow
     } finally {
       try { reader.releaseLock(); } catch { /* noop */ }
+      this._ctrl = null;
     }
   }
 
