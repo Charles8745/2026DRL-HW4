@@ -17,6 +17,8 @@ export class ChatLog {
     this.mediaMap = mediaMap;
     this.onAction = onAction;
     this._decks = [];          // track decks to supersede older ones
+    this._cur = null;          // in-progress streaming bubble (set by beginAssistant)
+    this._curText = null;
   }
 
   setMediaMap(map) { this.mediaMap = map || {}; }

@@ -221,18 +221,19 @@ def test_semantic_path_nests_retrieval_substeps_under_tool_call():
     sid = o.memory.new_session()
     ev = []
     o.process(sid, "想找通勤省油好停的車", on_step=lambda et, d: ev.append((et, d)))
-    types = [et for et, _ in ev]
+    ev_nt = [(et, d) for et, d in ev if et != "token"]   # token streams are orthogonal to the stage sequence
+    types = [et for et, _ in ev_nt]
     # tool_call -> 4 retrieval substeps -> tool_result, all between route and memory
     assert "tool_call" in types and "tool_result" in types
     tc_i = types.index("tool_call")
     tr_i = types.index("tool_result")
-    retr = [d for et, d in ev if et == "retrieval"]
+    retr = [d for et, d in ev_nt if et == "retrieval"]
     assert [d["phase"] for d in retr] == ["bm25", "vector", "rrf", "rerank"]
     # nesting: every retrieval event carries parentId == the semantic_search tool_call index
-    tc = next(d for et, d in ev if et == "tool_call")
+    tc = next(d for et, d in ev_nt if et == "tool_call")
     assert all(d["parentId"] == tc["index"] for d in retr)
     # ordering: retrieval substeps fall strictly between the tool_call and its tool_result
-    retr_positions = [i for i, (et, _) in enumerate(ev) if et == "retrieval"]
+    retr_positions = [i for i, (et, _) in enumerate(ev_nt) if et == "retrieval"]
     assert all(tc_i < p < tr_i for p in retr_positions)
 
 

@@ -65,6 +65,7 @@ export class SseClient {
         signal: this._ctrl.signal,
       });
     } catch (e) {
+      this._ctrl = null;                            // reset so a later abort() can't hit a stale controller
       if (e && e.name === 'AbortError') return;     // user stopped before headers
       return this._fallback(sessionId, message, onEvent);   // network/refused
     }
