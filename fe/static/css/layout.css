@@ -71,6 +71,7 @@
   transition: background var(--dur-fast) var(--ease-out);
 }
 .rail__btn:hover, .rail__btn[aria-pressed="true"] { background: var(--c-green-700); }
+.rail__btn svg { display: block; }
 .rail__spacer { flex: 1; }
 .rail__keydot {
   width: 12px; height: 12px; border-radius: var(--r-pill);
