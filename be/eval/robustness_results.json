@@ -7,10 +7,10 @@
       "subtype": "compound_filter",
       "checks": {
         "router_label": true,
-        "grounded": false
+        "grounded": true
       },
       "checks2": null,
-      "passed": false,
+      "passed": true,
       "error": null
     },
     {
@@ -19,7 +19,7 @@
       "subtype": "slot_continuation",
       "checks": {
         "router_label": true,
-        "grounded": false
+        "grounded": true
       },
       "checks2": {
         "grounded": true,
@@ -34,13 +34,13 @@
       "subtype": "semantic_then_ordinal",
       "checks": {
         "router_label": true,
-        "grounded": false
+        "grounded": true
       },
       "checks2": {
-        "grounded": false,
+        "grounded": true,
         "no_crash": true
       },
-      "passed": false,
+      "passed": true,
       "error": null
     },
     {
@@ -88,10 +88,10 @@
       "subtype": "escalate",
       "checks": {
         "router_label": true,
-        "awaiting_confirmation": true
+        "awaiting_confirmation": false
       },
       "checks2": null,
-      "passed": true,
+      "passed": false,
       "error": null
     },
     {
@@ -100,10 +100,10 @@
       "subtype": "cheap_scooter",
       "checks": {
         "router_label": true,
-        "grounded": false
+        "grounded": true
       },
       "checks2": null,
-      "passed": false,
+      "passed": true,
       "error": null
     },
     {
@@ -125,12 +125,12 @@
       "subtype": "multi_intent_book_first",
       "checks": {
         "router_label": true,
-        "grounded": false
+        "grounded": true
       },
       "checks2": {
-        "awaiting_confirmation": false
+        "awaiting_confirmation": true
       },
-      "passed": false,
+      "passed": true,
       "error": null
     },
     {
@@ -203,7 +203,7 @@
       "subtype": "ordinal_out_of_range",
       "checks": {
         "router_label": true,
-        "grounded": false
+        "grounded": true
       },
       "checks2": {
         "grounded": true,
@@ -217,11 +217,11 @@
       "category": "edge",
       "subtype": "no_insale_listing",
       "checks": {
-        "grounded": false,
+        "grounded": true,
         "no_crash": true
       },
       "checks2": null,
-      "passed": false,
+      "passed": true,
       "error": null
     },
     {
@@ -229,12 +229,12 @@
       "category": "edge",
       "subtype": "zero_budget",
       "checks": {
-        "honest_empty": true,
+        "honest_empty": false,
         "grounded": true,
         "no_crash": true
       },
       "checks2": null,
-      "passed": true,
+      "passed": false,
       "error": null
     },
     {
@@ -255,11 +255,11 @@
       "subtype": "vague_no_condition",
       "checks": {
         "router_label": true,
-        "grounded": false,
+        "grounded": true,
         "no_crash": true
       },
       "checks2": null,
-      "passed": false,
+      "passed": true,
       "error": null
     },
     {
@@ -291,11 +291,11 @@
       "category": "exception",
       "subtype": "budget_cap",
       "checks": {
-        "grounded": false,
+        "grounded": true,
         "no_crash": true
       },
       "checks2": null,
-      "passed": false,
+      "passed": true,
       "error": null
     },
     {
@@ -364,11 +364,11 @@
       "subtype": "english_query",
       "checks": {
         "router_label": true,
-        "grounded": false,
+        "grounded": true,
         "no_crash": true
       },
       "checks2": null,
-      "passed": false,
+      "passed": true,
       "error": null
     },
     {
@@ -376,11 +376,11 @@
       "category": "exception",
       "subtype": "emoji_mixed",
       "checks": {
-        "grounded": false,
+        "grounded": true,
         "no_crash": true
       },
       "checks2": null,
-      "passed": false,
+      "passed": true,
       "error": null
     },
     {
@@ -508,22 +508,22 @@
   ],
   "metrics": {
     "n": 40,
-    "pass_rate": 0.75,
+    "pass_rate": 0.925,
     "by_category": {
       "usage": {
-        "n": 10,
-        "passed": 5,
-        "pass_rate": 0.5
-      },
-      "edge": {
         "n": 10,
         "passed": 8,
         "pass_rate": 0.8
       },
+      "edge": {
+        "n": 10,
+        "passed": 9,
+        "pass_rate": 0.9
+      },
       "exception": {
         "n": 10,
-        "passed": 7,
-        "pass_rate": 0.7
+        "passed": 10,
+        "pass_rate": 1.0
       },
       "security": {
         "n": 10,
@@ -537,7 +537,7 @@
         "total": 12
       },
       "grounded": {
-        "passed": 25,
+        "passed": 37,
         "total": 38
       },
       "no_crash": {
@@ -557,7 +557,7 @@
         "total": 3
       },
       "honest_empty": {
-        "passed": 6,
+        "passed": 5,
         "total": 6
       },
       "blocked": {
@@ -575,6 +575,6 @@
     },
     "errors": 0
   },
-  "api_calls": 152,
+  "api_calls": 149,
   "api_retries": 0
 }

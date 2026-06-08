@@ -182,6 +182,30 @@
 3. `index.html`（M3.8）**漏 link** `chat/pipeline/landing/components` 四個 CSS → UI 無樣式（top-left、未置中）→ 補 link（`719be2d`）。
 4. `chat.css` 用了**不存在的 token 名**（`--color-*`/`--space-*`/`--radius-*` → fallback 到硬寫深色 `#161616`）→ 聊天區深色不符風格 C → 改回真 token（`--c-*`/`--sp-*`/`--r-*`）、亮色白卡、零裸 hex（`fe786e6`）。
 
+## K. UI 操作優化：操作性修復 + 視覺質感（2026-06-08）
+
+**動機**：以真實瀏覽器（chrome-devtools 端到端）親自操作 §J 改版後的 app，量到一個**致命操作性 bug** 與多個體驗痛點，加上使用者追加 4 點（文字串流／rail emoji 醜／泡泡塞滿／對話框未固定）。本輪聚焦操作體驗 + 視覺質感。
+
+**流程與 AI 協作**：brainstorming → spec（`docs/superpowers/specs/2026-06-08-ui-ux-operability-visual-polish-design.md`）→ **6 面向多代理對抗式自審**（63 findings／54 confirmed，剔除 ~40「功能未實作」雜訊，落實 12 項真缺陷：spec↔plan CSS 不一致、prompt 影響 groundedness 的灌水陷阱、串流會打破既有序列測試…）→ writing-plans（M0–M4 + 收尾）→ subagent-driven TDD（每 milestone 一實作代理 + spec/品質審查代理）→ **控制者真實瀏覽器逐 milestone 驗收**。兩項使用者拍板：卡片為主 + 一句話摘要、開放動 prompt/後端求最佳 UX。
+
+**里程碑（M0–M4，皆 TDD + 真實瀏覽器驗收）**：
+- **M0 捲動修復 + composer 釘底**：根因＝`.chatlog` 無 flex/overflow 規則、`#app` 100vh overflow:hidden → 整頁僅捲 37px、18 張車卡可見 0。修法＝`.chatlog` 成 `overflow-y:auto` flex 捲動容器。控制者驗收再發現 demo banner（in-flow）把 `#app` 推出視窗 → 改 body flex column + `#app` flex:1（`8f1929a`）。
+- **M1 版面與視覺重整**：composer `<input>`→自動增高 `<textarea>`（Enter 送出／Shift+Enter 換行／IME 不誤送／送出後焦點回輸入框，抽 `isSubmitKey` 純函式）；對話泡泡 `align-self` 限寬留白；rail emoji→內嵌單色 SVG + `title`；landing 收單一輸入。
+- **M2 結果呈現**：意圖 gating（`shouldRenderDeck`，追問/確認不灌車卡）、前 6 張 + 顯示更多（`splitDeck`）、prompt 精簡（僅 1-2 句、不重述規格與里程、**保留價格可述**）、prose 安全收合。控制者驗收抓到**精簡 prompt 偶發傾印工具 JSON**（1/2 機率）→ 加「切勿輸出 JSON／原始資料」硬化（`0bd7bce`），重跑 2/2 乾淨。
+- **M3 文字串流 + 串流互動**：`LLM.generate(on_token=…)` 串流（OpenAIClient `stream=True`＋FakeLLM 分段）、`run_handler`/orchestrator 透傳並 emit `token` 事件、FE 增量渲染（`final` 以權威文字取代 + 掛車卡）、串流中禁用 composer + 可停止（AbortController）。**eval 相同性鎖死**：`on_step=None → on_token=None → 非串流 → 位元相同`（`test_on_step_none_is_identical` 綠）；既有精確序列測試濾掉 token 事件後更新。控制者真實瀏覽器驗證：token 逐字串流（appendToken 30/65 次、長度遞增）、停止鍵真的中止 in-flight 串流（token 凍結）、中止後可恢復。
+- **M4 確認鈕 + 細節打磨**：兩階段閘觸發時渲染「確認/取消」快捷鈕（`shouldShowConfirm`，掛在 chatlog flex 子層）、**真實 per-stage 計時**（後端 `time.monotonic` emit `elapsed_ms`，移除假 `0 ms`，未量階段顯示空白、`fmtMs` 子毫秒顯 `<1 ms`；`elapsed_ms` 只在 emit 事件、不入回傳 dict 故不破 eval 相同性）、管線面板右緣防裁切、rail tooltip（M1 已加）。控制者驗證確認鈕→送「確認」→ book_viewing 執行→「已為您完成預約」。
+
+**eval 重跑（真 OpenAI gpt-4.1-mini）抓到的真實整合 bug**：eval 的 `ThrottledRetryClient`（duck-type LLM Protocol、包 OpenAIClient）在 M3 加 `on_token` 時被漏改 → orchestrator 恆傳 `on_token=`（eval 下為 None）→ eval 26/27 報 `unexpected keyword argument 'on_token'`。單元測試（FakeLLM）與 demo 瀏覽器（直用 OpenAIClient）都漏，**只有 eval 路徑會踩**——正是 eval 重跑的價值。修＝wrapper 透傳 on_token + 離線簽章守門 `test_eval_streaming_compat.py`（`f8ea0f3`）。
+
+**eval 前後（誠實對照，無回歸、且 groundedness/robustness 顯著改善——詳見 report §7.7）**：
+- 主 27 題：router 0.889（不變）、task 0.630→0.593（非決定性波動）、**groundedness 違規 0.222→0.037**、多輪鏈 0.25→0.50；0 error、PASS=false（task 仍未達 0.85 門檻，誠實）。
+- 檢索 ablation（§7.4）：與基線一致（full recall@5 0.812、MRR 0.771、nDCG 0.737；模型層、不受 prompt 影響）。
+- sem-* 端到端（§7.5）：router 1.0、觸發 0.75、grounded 1.0（不變）。
+- robustness（§7.6）：**總 pass 0.725→0.925**、**grounded 25/38→37/38**、exception 0.70→1.00、security 1.00、router 12/12、no_crash 23/23。
+- **為何 groundedness/robustness 改善而非灌水**：計分器（`_facts_from_trace` 只白名單價格）一字未改、凍結 testset 一字未動；改善純粹來自「叫模型別逐台重述里程」——里程（5 位數）本是已知偽陽性來源（§7.6 舊述），不再重述 → 偽陽性自然消失，模型仍正常引用價格故價格 grounding 照常被量。退回門檻（違規率升 >5pp 即退回）未觸發（實際下降 18.5pp）。
+
+**回歸保證**：`pytest -q` → **249 passed**（242 基線 + M2 prompt 守門 + M3 串流×3 + M5 eval 相容守門等；凍結 `test_*_frozen`/`test_on_step_none_is_identical` 全綠）；`node --test` → **58 pass / 0 fail**（新增 isSubmitKey/composerState/shouldRenderDeck/splitDeck/streamRender/shouldShowConfirm/fmtMs）。分支 `feat/ui-ux-operability`。
+
 修復後端到端實測通過：landing（置中襯線 wordmark＋賽車綠搜尋膠囊＋4 chips＋demo banner）→ 真實查詢「30萬內 Yamaha 跑車」→ SSE 管線逐步點亮（意圖 chip「找車推薦」、真實 `tokens 1686 · 5974ms`）→ 兩張車卡載入**真實原廠照**（三層 fallback 命中 media_url）＋金色價格＋車況 badge → 多輪（點「查看規格」→ `listing_id` prefill 第 2 輪）**無 403** → user 泡泡賽車綠／bot 泡泡純白（風格 C 確認）。**教訓**：per-milestone 綠燈 ≠ 整合可用；跨里程碑的 boot-wiring／回應 header round-trip／CSS link／token 命名一致性，必須以真實瀏覽器把關。hero 浮動圖（`fe/static/img/hero/`）與自託管字型（`fe/static/fonts/`）為使用者待放的二進位檔——缺檔時優雅降級（hero 卡自隱、字型 fallback 系統字），demo 不放也可用。
 
 **成果**：242 離線測試全綠（含凍結 27＋40 守門）＋全 JS 純邏輯套件 0 fail＋手動 smoke 8 檢查點通過＋控制者真實瀏覽器端到端驗證通過（修復 4 個整合缺口）。spec `docs/superpowers/specs/2026-06-07-ui-ux-redesign-sse-byok-design.md`，實作分 M0–M7 多次 commit 於 `feat/ui-ux-redesign`。

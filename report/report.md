@@ -154,6 +154,8 @@ groundedness 以**規則比對為主**：蒐集該輪工具回傳的所有價格
 | injection | 1 | 1.00 | 1.00 | 0.00 |
 
 > 數值取自單次完整執行；`gpt-4.1-mini` 即使 `temperature=0`，工具迴圈較長的題目仍有輕微非決定性，重跑時個別 case 可能微幅變動（如售後、範圍外的個別題）。
+>
+> **更新（UI 操作優化輪，2026-06-08）**：本輪精簡找車推薦 handler 回覆 prompt（僅 1-2 句、不重述卡片規格與里程、保留價格可述）後重跑——router **0.889 不變**、task 0.630→**0.593**（非決定性波動）、groundedness 違規 **0.222→0.037**、多輪鏈 0.25→**0.50**。testset 與計分器一字未改（凍結守門全綠），改善來自移除里程偽陽性。完整四項 eval 前後對照與原因見 **§7.7**。
 
 ### 7.2 結果分析（誠實，未達門檻）
 
@@ -232,7 +234,8 @@ groundedness 以**規則比對為主**：蒐集該輪工具回傳的所有價格
 **關鍵發現（誠實）：**
 - **管線結構性穩健**：路由 100%、零崩潰（no_crash 23/23，含亂碼／超長／emoji／英文／矛盾輸入皆未 crash）、查無資料誠實回報（honest_empty 6/6，未捏造任何 L###/O###）、兩階段確認閘在「不用問直接約」的繞過嘗試下仍守住（awaiting_confirmation），否定「先不要」正確取消（confirmed_cancelled）。
 - **安全 10/10**：injection 直接覆寫（sec-01/04）由輸入守門攔下；中文系統提示外洩／開發者模式變體（sec-02/03）**修補前守門擋不住、靠模型自身拒絕通過**；範圍外任務（寫程式／翻譯）、幻覺價格誘導（「是不是只要 5 萬」）、越權索取個資皆被模型拒絕（no_domain_tool + grounded）。
-- **`grounded` 缺口幾乎全是計分器偽陽性，非模型幻覺**：被標記的數字**全為里程**（如 15000／24000／38000 公里），是模型**正確引用工具回傳的 `mileage_km`**；共用的 `_facts_from_trace` 只白名單**價格**（與 §7.1 主驗證同一計分器），故把合法里程誤判為未溯源。（證據基礎：結果檔僅存各檢查布林值，此里程特徵由一次性診斷重跑失敗案例印出 reply＋violations 佐證，並可由「在售刈登 schema 帶 `mileage_km`、而 `_facts_from_trace` 僅白名單 `asking_price`/`price`」結構性推得。）此為**已知計分器侷限**（§7.5 已述）、與凍結 27 題基線共用，**本次刻意不更動**（改動會牽動凍結基線；放寬以拉高分數等同灌水）。exception 類 0.70→0.60 亦為此里程偽陽性的非決定性波動，非回歸。
+- **`grounded` 缺口幾乎全是計分器偽陽性，非模型幻覺**：被標記的數字**全為里程**（如 15000／24000／38000 公里），是模型**正確引用工具回傳的 `mileage_km`**；共用的 `_facts_from_trace` 只白名單**價格**（與 §7.1 主驗證同一計分器），故把合法里程誤判為未溯源。（證據基礎：結果檔僅存各檢查布林值，此里程特徵由一次性診斷重跑失敗案例印出 reply＋violations 佐證，並可由「在售刈登 schema 帶 `mileage_km`、而 `_facts_from_trace` 僅白名單 `asking_price`/`price`」結構性推得。）此為**已知計分器侷限**（§7.5 已述）、與凍結 27 題基線共用，本輪（robustness eval）**刻意不更動計分器**（改動會牽動凍結基線；放寬以拉高分數等同灌水）。exception 類 0.70→0.60 亦為此里程偽陽性的非決定性波動，非回歸。
+  - **後續更新（§7.7，UI 操作優化輪）**：計分器與 testset **仍一字未改**，但因該輪叫模型「不逐台重述里程」，里程不再進入 prose → 這些偽陽性自然消失：robustness `grounded` 25/38→**37/38**、總 pass 0.725→**0.925**、exception 0.70→**1.00**。這是回覆更乾淨帶來的真實提升，非放寬計分。
 
 **修補（便宜的真缺口，認誠處置）：**
 - 量測顯示 sec-02/03 的中文 injection 變體**繞過關鍵字守門**（僅靠模型善意攔下）。已擴充 `governance._INJECTION`（系統提示／開發者模式／印出指令／無視先前等變體），守門對 injection-style 探針的攔截覆蓋由 **2/4 提升至 4/4**（離線 governance 測試佐證）。
@@ -241,9 +244,29 @@ groundedness 以**規則比對為主**：蒐集該輪工具回傳的所有價格
 
 **未解決（future work）：** 關鍵字 blocklist 無法窮舉 → 需 LLM-based injection 偵測；groundedness 事實白名單僅價格、且價格未正規化（「30萬」↔300000）→ mileage／規格-aware 抽取；多輪「找車→約看第一台」偶發未觸發 book_viewing（usg-10，非決定性；與 multi-03 橋接同屬 future work）。
 
+### 7.7 UI 操作優化輪：精簡 prompt 後的 eval 重跑（誠實對照）
+
+UI 操作優化輪（§8.1）唯一動到 eval 的是**找車推薦 handler 回覆 prompt 精簡**（卡片已完整呈現規格，故文字僅 1-2 句總結、**不逐台重述規格與里程**，但**保留價格可自然帶到**）。**testset 四檔與 groundedness 計分器（`_facts_from_trace` 只白名單價格）一字未改**（`test_*_frozen`／`test_on_step_none_is_identical` 全綠），故以下變動皆為同一量尺下的真實對照。設「違規率較基線升 > 5 個百分點即退回 prompt」門檻，實際**未觸發**。
+
+| eval | 指標 | 基線 | 本輪 | 解讀 |
+|---|---|---|---|---|
+| 主 27 題 | router_accuracy | 0.889 | 0.889 | 不變 |
+| (§7.1) | task_success | 0.630 | 0.593 | 非決定性波動（仍 < 0.85 門檻） |
+| | groundedness 違規 | 0.222 | **0.037** | 大幅改善 |
+| | 多輪鏈成功 | 0.25 | **0.50** | 改善 |
+| 檢索 ablation (§7.4) | full recall@5 / MRR / nDCG | 0.812 / 0.760 / 0.729 | 0.812 / 0.771 / 0.737 | 一致（模型層，不受 prompt 影響；rerank 微幅非決定性） |
+| sem-* (§7.5) | router / 觸發 / grounded | 1.0 / 0.75 / 1.0 | 1.0 / 0.75 / 1.0 | 不變 |
+| robustness (§7.6) | 總 pass | 0.725 | **0.925** | 大幅改善 |
+| (40 題) | grounded 檢查 | 25/38 | **37/38** | 大幅改善 |
+| | exception / security | 0.70 / 1.00 | **1.00** / 1.00 | exception 改善、security 滿分 |
+
+**為何 groundedness／robustness 改善而非灌水**：§7.6 早已誠實揭露——`grounded` 缺口幾乎全是計分器把模型**正確引用的里程**（5 位數，如 15000／24000）誤判為未溯源（計分器只白名單價格）。本輪叫模型「不逐台重述里程」後，這些里程不再出現在 prose → 偽陽性自然消失；而「價格可自然帶到」使模型仍引用價格，故價格 grounding 照常被量測（沒有把可驗事實藏起來）。**計分器與 testset 皆未動**，純粹是回覆內容更精簡乾淨帶來的真實提升。task_success 微降為長工具迴圈題目的非決定性，非回歸。
+
+**整合驗證額外收穫**：eval 重跑本身抓到一個單元測試與 demo 瀏覽器都漏的真實整合 bug——eval 的 `ThrottledRetryClient`（duck-type `LLM` Protocol）在串流輪加 `on_token` 時被漏改，使 eval 全面報錯；已修正並加離線簽章守門（log §K）。
+
 ## 8. UI/UX 重新設計：SSE 即時管線 + BYOK + 視覺改版
 
-最後一輪把「決策過程」從事後一次性的 Decision Trace 側欄，升級成**即時串流的指揮中心**，並讓系統可在公開環境以**自帶金鑰（BYOK）**安全運行。三大支柱：
+其中一輪把「決策過程」從事後一次性的 Decision Trace 側欄，升級成**即時串流的指揮中心**，並讓系統可在公開環境以**自帶金鑰（BYOK）**安全運行。三大支柱：
 
 **① SSE 即時管線（零行為變更觀察層）**：在 `process()`／`run_handler()`／`semantic_search()`／`retrieve()` 加入 append-only、default `None` 的 `on_step`／`on_substep` 觀察鉤子——當為 `None` 時行為與改版前**位元相同**（由 `tests/test_orchestrator_stream.py::test_on_step_none_is_identical` 守門：同 FakeLLM 腳本跑兩次 deep-equal 整個回傳含 `trace.tokens`，涵蓋 guard/pending-yes/pending-cancel/fallback/recommend/semantic 六路徑）。`_emit` 以 `copy.deepcopy` + 鍵名 scrub 唯讀快照，**絕不就地改動** trace/memory 的 listing dict（保護 eval 與序數指代）；retriever 的 `on_substep` 只回 `bm25`→`vector`→`rrf`→`rerank` 已算好結果的唯讀快照，**禁重排/重切/重呼叫**（golden-ranking 守門證 ablation 排名位元不變）。前端以 `EventStream`（fetch ReadableStream）逐 frame 接收，PipelinePanel 以 reducer 把事件還原成步驟樹（retrieval 子步透過 `parentId` 掛在 semantic_search 工具節點下）。
 
@@ -254,6 +277,18 @@ groundedness 以**規則比對為主**：蒐集該輪工具回傳的所有價格
 **部署（單實例、SSE-safe）**：gunicorn `gthread`、`workers` 硬鉗為 1（boot self-check 拒 >1）、`X-Accel-Buffering: no`（R10/R11）；`wsgi.py` 以 `assert not app.debug` 強制非 debug；Render/Docker 皆單實例、健康檢查 `/`，**公開主機絕不設 `OPENAI_API_KEY`**（生產＝BYOK only，R1，DEPLOY.md 粗體警語）。風險登記簿 6 critical／9 high 風險全於設計階段吸收，逐項對應守門測試。
 
 **回歸保證**：全離線單元測試 242 個全綠（新增 SSE/BYOK/安全/部署/JS-mirror 測試，0 真實網路、全 `Fake*`/spy），凍結基準（27 題主 eval、40 題 robustness、`*results*.json`）一字未動，主 27 題 router 0.889 不變——觀察層與 BYOK 對既有管線**零行為變更**。
+
+### 8.1 UI 操作優化（M0–M4，2026-06-08）
+
+以真實瀏覽器（chrome-devtools 端到端）親自操作上一輪改版後的 app，量到一個**致命操作性 bug**——聊天區整頁僅能捲 37px（`.chatlog` 缺 flex/overflow 規則、`#app` 100vh overflow:hidden），18 張車卡可見數為 0、做完第二輪仍卡在第一輪頂端——以及資訊洪流與輸入體驗痛點。本輪聚焦操作體驗 + 視覺質感，分五個里程碑（皆 TDD + **控制者真實瀏覽器逐里程碑驗收**）：
+
+- **M0 捲動修復 + composer 釘底**：`.chatlog` 改為 `overflow-y:auto` flex 捲動容器、composer 釘底固定列；並修正 demo banner 把 `#app` 推出視窗（body flex column + `#app` flex:1）。回答/車卡/多輪皆可達、composer 永遠可見。
+- **M1 版面與視覺重整**：composer `<input>`→自動增高 `<textarea>`（Enter 送出／Shift+Enter 換行／IME 不誤送／送出後焦點回輸入框）、對話泡泡 `align-self` 限寬留白（user 右／bot 左）、rail emoji→內嵌單色 SVG + tooltip、landing 收單一輸入。
+- **M2 結果呈現（卡片為主 + 一句話摘要）**：意圖 gating（追問/確認不再灌一副不相關車卡）、預設前 6 張 + 「顯示更多」、handler 回覆 prompt 精簡（§7.7）、長 prose 安全收合。
+- **M3 文字串流輸出**：最終回覆改 SSE token 逐字串流（`LLM.generate(on_token=…)`、orchestrator emit `token`、FE 增量渲染、`final` 以權威文字定稿並掛車卡）；串流中禁用 composer 且可**停止**（`AbortController`，真實中止 in-flight 串流）。**eval 相同性**：`on_step=None → 非串流 → 位元相同`（`test_on_step_none_is_identical` 守門），eval/`/api/chat` 仍走非串流路徑。
+- **M4 確認/取消 + 細節打磨**：兩階段確認閘觸發時渲染「確認/取消」快捷鈕（點擊執行 book_viewing）、**真實 per-stage 計時**（取代假 `0 ms`，未量階段留白、子毫秒顯 `<1 ms`）、管線面板右緣防裁切。
+
+**工作流**：brainstorming → spec → 6 面向多代理對抗式自審（54 confirmed findings 中落實 12 項真缺陷）→ writing-plans（M0–M4）→ subagent-driven TDD（每里程碑實作 + spec/品質審查代理）→ 控制者真實瀏覽器驗收 → eval 重跑（§7.7）。**回歸**：`pytest` 249 passed、`node --test` 58 pass，凍結守門全綠；分支 `feat/ui-ux-operability`。詳見 log §K。
 
 ## 9. 結論
 
