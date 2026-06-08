@@ -47,12 +47,12 @@ class ThrottledRetryClient:
         if dt < self.min_interval:
             time.sleep(self.min_interval - dt)
 
-    def generate(self, system, messages, tools=None) -> LLMResponse:
+    def generate(self, system, messages, tools=None, on_token=None) -> LLMResponse:
         for attempt in range(self.max_retries + 1):
             self._throttle()
             try:
                 self.calls += 1
-                resp = self.inner.generate(system, messages, tools=tools)
+                resp = self.inner.generate(system, messages, tools=tools, on_token=on_token)
                 self._last = time.monotonic()
                 return resp
             except Exception as e:
