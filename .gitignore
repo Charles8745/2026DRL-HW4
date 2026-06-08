@@ -4,6 +4,9 @@
 .env[ ]*
 !.env.example
 
+# Claude Code local config (local only)
+.claude/
+
 # Brainstorm visual companion (local only)
 .superpowers/
 
