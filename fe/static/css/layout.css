@@ -27,6 +27,8 @@
 #app[data-view="landing"] .view-landing { display: flex; flex: 1; min-height: 0; }
 #app[data-view="chat"]    .view-chat    { display: flex; flex: 1; min-height: 0; flex-direction: column; }
 
+#app[data-view="landing"] .composer { display: none; }
+
 /* chat log is THE scroll container; composer is a pinned bottom bar */
 .chatlog {
   flex: 1 1 auto;
