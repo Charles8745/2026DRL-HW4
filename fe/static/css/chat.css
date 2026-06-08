@@ -82,3 +82,8 @@
 }
 .composer__send:hover { background: var(--c-green-700); }
 .composer--streaming .composer__send { background: var(--c-danger); }
+
+/* --- Listing deck "show more" toggle --- */
+.listing-deck__more { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--sp-3); margin-top: var(--sp-3); }
+.listing-deck__more[hidden] { display: none; }
+.listing-deck__more-btn { justify-self: start; margin-top: var(--sp-2); }

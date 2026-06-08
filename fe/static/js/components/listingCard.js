@@ -126,14 +126,31 @@ export function renderEmptyCard(onAction) {
   return card;
 }
 
+// Split rows into a visible head (<= maxShown) and a collapsed tail. Pure.
+export function splitDeck(rows, maxShown) {
+  if (!Array.isArray(rows)) return { shown: [], hidden: [] };
+  return { shown: rows.slice(0, maxShown), hidden: rows.slice(maxShown) };
+}
+
 // Render a deck of cards (or the empty-state) into a container element.
 // rows: enriched listing list (possibly []). superseded marks an old deck.
-export function renderDeck(rows, mediaMap, onAction, { superseded = false } = {}) {
+export function renderDeck(rows, mediaMap, onAction, { superseded = false, maxShown = 6 } = {}) {
   const deck = el('div', 'listing-deck');
   if (!Array.isArray(rows) || rows.length === 0) {
     deck.appendChild(renderEmptyCard(onAction));
     return deck;
   }
-  for (const row of rows) deck.appendChild(renderListingCard(row, mediaMap, onAction, { superseded }));
+  const { shown, hidden } = splitDeck(rows, maxShown);
+  for (const row of shown) deck.appendChild(renderListingCard(row, mediaMap, onAction, { superseded }));
+  if (hidden.length) {
+    const more = el('div', 'listing-deck__more');
+    for (const row of hidden) more.appendChild(renderListingCard(row, mediaMap, onAction, { superseded }));
+    more.hidden = true;
+    const btn = el('button', 'btn listing-deck__more-btn', `顯示更多（${hidden.length}）`);
+    btn.type = 'button';
+    btn.addEventListener('click', () => { more.hidden = false; btn.remove(); });
+    deck.appendChild(more);
+    deck.appendChild(btn);
+  }
   return deck;
 }
