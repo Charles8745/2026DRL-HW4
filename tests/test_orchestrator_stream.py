@@ -169,15 +169,17 @@ def test_pending_cancel_emits_confirm_gate_cancelled_then_final_zero_llm():
 
 def test_fallback_path_event_sequence():
     o, events = _collect(_script_fallback)
-    types = [et for et, _ in events]
+    types = [et for et, _ in events if et != "token"]   # token is streaming-text, orthogonal to stages
     assert types == ["guard", "rewrite", "route", "fallback", "memory", "final"]
+    assert any(et == "token" for et, _ in events)        # fallback streams its reply text
     assert events[-1][1]["trace"]["steps"] == []
 
 
 def test_recommend_path_emits_tool_call_then_tool_result():
     o, events = _collect(_script_recommend)
-    types = [et for et, _ in events]
+    types = [et for et, _ in events if et != "token"]   # token is streaming-text, orthogonal to stages
     assert types == ["guard", "rewrite", "route", "tool_call", "tool_result", "memory", "final"]
+    assert any(et == "token" for et, _ in events)        # handler streams its final reply text
     tc = next(d for et, d in events if et == "tool_call")
     assert tc == {"name": "recommend", "args": {"budget": 300000, "usage": "sport"}, "index": 0}
     tr = next(d for et, d in events if et == "tool_result")

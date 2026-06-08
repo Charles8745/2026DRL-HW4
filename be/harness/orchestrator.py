@@ -69,6 +69,14 @@ class Orchestrator:
             return ret
         self._emit(on_step, "guard", {"blocked": False, "reason": None})
 
+        # SSE path streams the final reply text token-by-token; on_step=None keeps
+        # on_token=None so every llm.generate stays on the non-streaming path (the
+        # eval-identical guarantee: test_on_step_none_is_identical).
+        on_token = None
+        if on_step is not None:
+            def on_token(t, _emit=self._emit, _os=on_step):
+                _emit(_os, "token", {"text": t})
+
         # 1) pending confirmation? (no LLM needed)
         slots = self.memory.get(sid)["slots"]
         pending = slots.get("pending_action")
@@ -128,7 +136,8 @@ class Orchestrator:
 
         # 3) fallback path (no tools)
         if label == "閒聊範圍外":
-            resp = self.llm.generate(FALLBACK_SYS, [{"role": "user", "content": rw["rewritten_query"]}], tools=None)
+            resp = self.llm.generate(FALLBACK_SYS, [{"role": "user", "content": rw["rewritten_query"]}],
+                                     tools=None, on_token=on_token)
             tokens += resp.total_tokens
             reply = resp.text or "我是二手重機客服，可協助找車、比規格、查訂單與售後。"
             self.memory.append_message(sid, "assistant", reply)
@@ -152,7 +161,7 @@ class Orchestrator:
         if rw["resolved_listing_id"]:
             handler_query += f"（指定 listing_id={rw['resolved_listing_id']}）"
         out = run_handler(self.llm, self.store, label, handler_query,
-                          TurnBudget(config.MAX_TOOL_CALLS_PER_TURN), on_step=on_step)
+                          TurnBudget(config.MAX_TOOL_CALLS_PER_TURN), on_step=on_step, on_token=on_token)
         tokens += out["tokens"]
 
         # remember viewed listings (ordinal resolution); auto-fill preference slots from tool args
