@@ -50,12 +50,13 @@
 .empty-card__hint { margin: 0; color: var(--c-ink-soft); font-size: var(--fs-sm); }
 .empty-card__relax { display: flex; gap: var(--sp-2); flex-wrap: wrap; margin-top: var(--sp-2); }
 
-/* --- ChatLog feed (M4.5) --- */
-.msg { max-width: 80%; padding: var(--sp-3); border-radius: var(--r-lg); line-height: var(--lh-body); }
-.msg--user { margin-left: auto; background: var(--c-green); color: var(--c-on-green); }
-.msg--bot { margin-right: auto; background: var(--c-surface); color: var(--c-ink); border: 1px solid var(--c-line); box-shadow: var(--sh-card); max-width: 100%; }
+/* --- ChatLog feed --- */
+.msg { max-width: 76%; padding: var(--sp-3) var(--sp-4); border-radius: var(--r-lg); line-height: var(--lh-body); }
+.msg--user { align-self: flex-end;  background: var(--c-green); color: var(--c-on-green); border-bottom-right-radius: var(--r-sm); }
+.msg--bot  { align-self: flex-start; background: var(--c-surface); color: var(--c-ink); border: 1px solid var(--c-line); box-shadow: var(--sh-card); }
+.msg--bot  { max-width: min(92%, 720px); }      /* readable text width */
 .msg__text { white-space: pre-wrap; }
-.msg--bot .listing-deck { max-width: 100%; }
+.msg--bot .listing-deck { max-width: 100%; }     /* deck may use the full bot bubble */
 
 /* visually-hidden aria-live region */
 .sr-only {
