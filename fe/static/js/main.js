@@ -171,7 +171,7 @@ async function main() {
     });
     form.addEventListener('submit', (e) => {
       e.preventDefault();
-      if (streaming) { sse.abort(); setStreaming(false); return; }   // 送出鈕在串流中＝停止
+      if (streaming) { sse.abort(); setStreaming(false); setPanelA11y(panelRoot, false); return; }   // 送出鈕在串流中＝停止
       const text = input.value;
       input.value = ''; autosize();
       runTurn(text);
@@ -189,7 +189,8 @@ async function main() {
       if (!btn) return;
       const action = btn.dataset.action;
       if (action === 'new') {
-        // reset conversation: clear chat + session + back to landing.
+        // reset conversation: abort any in-flight stream first, then clear chat + session + back to landing.
+        if (streaming) { sse.abort(); setStreaming(false); setPanelA11y(panelRoot, false); }
         const log = document.querySelector('[data-chatlog]');
         if (log) log.innerHTML = '';
         chat._decks = [];
