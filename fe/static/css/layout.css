@@ -26,6 +26,23 @@
 #app[data-view="landing"] .view-landing { display: flex; flex: 1; min-height: 0; }
 #app[data-view="chat"]    .view-chat    { display: flex; flex: 1; min-height: 0; flex-direction: column; }
 
+/* chat log is THE scroll container; composer is a pinned bottom bar */
+.chatlog {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+}
+.composer { flex: 0 0 auto; }
+#app[data-view="chat"] .composer {
+  border-top: 1px solid var(--c-line);
+  background: var(--c-surface);
+  padding: var(--sp-3) var(--sp-4);
+}
+
 /* left IconRail (deep green) */
 .rail {
   background: var(--c-green);
