@@ -15,6 +15,7 @@ import {
 import { ChatLog } from './components/chat.js';
 import { PipelinePanel } from './components/pipeline.js';
 import { initState, reduceEvent } from './components/pipelineReducer.js';
+import { shouldRenderDeck } from './components/deckPolicy.js';
 
 // extractRows(trace): the inline deck for an assistant bubble. Scan trace.steps and
 // keep the LAST listing-bearing tool_result.data (search_listings/recommend/
@@ -92,8 +93,8 @@ async function main() {
       panelView.render(pstate);
       if (event === 'final') {
         const trace = (data && data.trace) || {};
-        const rows = extractRows(trace);
-        chat.addAssistant((data && data.reply) || '', rows);
+        const rows = shouldRenderDeck(data && data.router_label) ? extractRows(trace) : null;
+        chat.addAssistant((data && data.reply) || '', rows);   // M3 Task 3.4 會改為 finishAssistant
         announce(rows ? rows.length : null, document);
         captureSession(data, trace);
       }
