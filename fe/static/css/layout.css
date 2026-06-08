@@ -6,7 +6,8 @@
   display: grid;
   grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--panel-w);
   grid-template-areas: "rail center panel";
-  height: 100vh;
+  flex: 1 1 0%;        /* fill the viewport below the (in-flow) demo banner */
+  min-height: 0;
   width: 100%;
   overflow: hidden;
 }

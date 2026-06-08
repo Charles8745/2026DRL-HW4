@@ -21,6 +21,12 @@
 html, body { height: 100%; }
 body {
   margin: 0;
+  /* viewport-fill flex column: demo banner (in-flow) + #app share 100% without
+     pushing #app's bottom (composer) below the fold. */
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   font-family: var(--ff-body);
   font-size: var(--fs-md);
   line-height: var(--lh-body);
